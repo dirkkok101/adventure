@@ -1,5 +1,4 @@
 import { Injectable } from '@angular/core';
-import { Scene } from '../models/game-state.model';
 import { GameStateService } from './game-state.service';
 import { SceneService } from './scene.service';
 
@@ -12,30 +11,41 @@ export class InventoryService {
         private sceneService: SceneService
     ) {}
 
-    checkInventory(): string {
-        const inventory = this.gameState.getCurrentState().inventory;
-        if (inventory.length === 0) {
-            return 'You are not carrying anything.';
+    getInventoryDisplay(): string {
+        const state = this.gameState.getCurrentState();
+        const inventoryItems = Object.entries(state.inventory)
+            .filter(([_, value]) => value)
+            .map(([key, _]) => {
+                const item = this.findItemById(key);
+                return item?.name || key;
+            });
+
+        if (inventoryItems.length === 0) {
+            return "You are not carrying anything.";
         }
-        return 'You are carrying:\n' + inventory.join('\n');
+
+        return "You are carrying:\n" + inventoryItems.join('\n');
     }
 
-    takeObject(objectId: string): string {
-        const scene = this.sceneService.getCurrentScene();
-        if (!scene?.objects?.[objectId]) {
-            return 'That object is not here.';
+    private findItemById(itemId: string) {
+        const scenes = this.sceneService.getAllScenes();
+        for (const scene of scenes) {
+            if (scene.objects?.[itemId]) {
+                return scene.objects[itemId];
+            }
         }
-
-        const object = scene.objects[objectId];
-        if (object.canTake) {
-            this.gameState.addToInventory(objectId);
-            return `You took the ${object.name}.`;
-        }
-
-        return 'You cannot take that.';
+        return null;
     }
 
-    hasObject(objectId: string): boolean {
-        return this.gameState.getCurrentState().inventory.includes(objectId);
+    hasItem(objectId: string): boolean {
+        return !!this.gameState.getCurrentState().inventory[objectId];
+    }
+
+    addItem(objectId: string): void {
+        this.gameState.addToInventory(objectId);
+    }
+
+    removeItem(objectId: string): void {
+        this.gameState.removeFromInventory(objectId);
     }
 }

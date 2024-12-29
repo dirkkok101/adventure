@@ -1,118 +1,123 @@
 import { Injectable } from '@angular/core';
 import { Command } from '../../models/command.model';
-import { CommandHandler } from './command-handler.interface';
+import { GameState, SceneInteraction } from '../../models/game-state.model';
 import { SceneService } from '../scene.service';
 import { GameStateService } from '../game-state.service';
-import { UIService } from '../ui.service';
-import { processInteraction, checkRequiredFlags } from '../../utils/interaction-utils';
-import { scenes } from '../../data/scenes';
+import { handleInteraction } from '../../data/game-mechanics';
+import { CommandHandler } from './command-handler.interface';
 
 @Injectable({
     providedIn: 'root'
 })
 export class InteractionCommandService implements CommandHandler {
-    private readonly interactionVerbs = ['take', 'open', 'close', 'read', 'use'];
-
     constructor(
         private sceneService: SceneService,
-        private gameState: GameStateService,
-        private uiService: UIService
+        private gameState: GameStateService
     ) {}
 
-    canHandle(command: Command): boolean {
-        return this.interactionVerbs.includes(command.verb);
-    }
-
-    handle(command: Command): string {
+    processCommand(command: Command): string {
         if (!command.object) {
             return `What do you want to ${command.verb}?`;
         }
 
-        return this.handleObjectInteraction(command.verb, command.object);
+        // Handle direction-based movement with 'enter' or 'go'
+        if ((command.verb === 'enter' || command.verb === 'go') && 
+            ['north', 'south', 'east', 'west'].includes(command.object)) {
+            return this.sceneService.moveToScene(command.object);
+        }
+
+        return this.processObjectInteraction(command.verb, command.object);
     }
 
-    private handleObjectInteraction(verb: string, objectId: string): string {
-        console.log('\n=== Object Interaction ===');
-        console.log('Verb:', verb);
-        console.log('Object:', objectId);
-
+    private processObjectInteraction(verb: string, objectId: string): string {
         const state = this.gameState.getCurrentState();
         const scene = this.sceneService.getCurrentScene();
 
-        // First check if the object is in the current scene
-        let object = scene?.objects?.[objectId];
-
-        // If not in scene, check if it's in inventory
-        if (!object && state.inventory.includes(objectId)) {
-            // Get the object definition from any scene (since it's in inventory)
-            for (const sceneId in scenes) {
-                const sceneObjects = scenes[sceneId].objects;
-                if (sceneObjects?.[objectId]) {
-                    object = sceneObjects[objectId];
-                    break;
-                }
-            }
+        if (!scene) {
+            return "Error: No current scene";
         }
 
-        // If we still can't find the object, it doesn't exist
+        // First check if the object is in the scene
+        let object = scene.objects?.[objectId];
+        
+        // If not in scene, check inventory
+        if (!object && state.inventory[objectId]) {
+            object = this.findObjectInAnyScene(objectId);
+        }
+
         if (!object) {
             return `I don't see any ${objectId} here.`;
         }
 
-        console.log('\nTarget Object:', {
-            id: object.id,
-            name: object.name,
-            visible: object.visibleOnEntry,
-            interactions: object.interactions
-        });
+        // Add to known objects
+        state.knownObjects.add(objectId);
 
-        const interaction = object.interactions?.[verb];
-        if (!interaction) {
-            if (verb === 'take' && object.canTake) {
-                // Default take behavior if no specific interaction is defined
-                this.gameState.addToInventory(objectId);
-                return `You took the ${object.name}.`;
+        // Check for specific interactions
+        if (object.interactions?.[verb]) {
+            return handleInteraction(object.interactions[verb], state);
+        }
+
+        // Handle standard verbs
+        switch (verb) {
+            case 'take':
+            case 'get':
+            case 'pick':
+                if (!object.canTake) {
+                    return `You can't take the ${object.name}.`;
+                }
+                if (state.inventory[objectId]) {
+                    return `You're already carrying the ${object.name}.`;
+                }
+                state.inventory[objectId] = true;
+                return `Taken.`;
+
+            case 'drop':
+            case 'put':
+                if (!state.inventory[objectId]) {
+                    return `You don't have the ${object.name}.`;
+                }
+                state.inventory[objectId] = false;
+                return `Dropped.`;
+
+            case 'open':
+            case 'unlock':
+                if (object.interactions?.['open']) {
+                    return handleInteraction(object.interactions['open'], state);
+                }
+                return `You can't open the ${object.name}.`;
+
+            case 'close':
+            case 'shut':
+                if (object.interactions?.['close']) {
+                    return handleInteraction(object.interactions['close'], state);
+                }
+                return `You can't close the ${object.name}.`;
+
+            case 'read':
+                if (object.interactions?.['read']) {
+                    return handleInteraction(object.interactions['read'], state);
+                }
+                return `There's nothing to read on the ${object.name}.`;
+
+            case 'enter':
+            case 'go':
+                if (object.interactions?.['enter']) {
+                    return handleInteraction(object.interactions['enter'], state);
+                }
+                return `You can't enter the ${object.name}.`;
+
+            default:
+                return `You can't ${verb} the ${object.name}.`;
+        }
+    }
+
+    private findObjectInAnyScene(objectId: string): any {
+        const allScenes = this.sceneService.getAllScenes();
+        for (const scene of allScenes) {
+            if (scene.objects?.[objectId]) {
+                return scene.objects[objectId];
             }
-            return `You cannot ${verb} that.`;
         }
-
-        console.log('\nInteraction:', {
-            verb,
-            requiredFlags: interaction.requiredFlags,
-            grantsFlags: interaction.grantsFlags,
-            removesFlags: interaction.removesFlags,
-            revealsObjects: interaction.revealsObjects
-        });
-        
-        // Check if the interaction is allowed based on flags
-        if (interaction.requiredFlags) {
-            const canInteract = checkRequiredFlags(state, interaction.requiredFlags);
-            if (!canInteract) {
-                return interaction.failureMessage || `You cannot ${verb} that.`;
-            }
-        }
-
-        // Process the interaction and update game state
-        const result = processInteraction(interaction, state);
-        
-        // Handle special cases
-        if (verb === 'take') {
-            this.gameState.addToInventory(objectId);
-        }
-        
-        // If the interaction reveals objects, mark them as revealed
-        if (interaction.revealsObjects) {
-            console.log('\nRevealing Objects:', interaction.revealsObjects);
-            interaction.revealsObjects.forEach(id => {
-                this.sceneService.revealObject(id);
-            });
-        }
-
-        // Update UI if inventory or visible objects changed
-        if (interaction.revealsObjects || verb === 'take') {
-            this.uiService.updateSidebar();
-        }
-
-        return result;
+        return null;
     }
 }

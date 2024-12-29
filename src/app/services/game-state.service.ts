@@ -1,83 +1,178 @@
 import { Injectable } from '@angular/core';
-import { GameState } from '../models/game-state.model';
 import { BehaviorSubject } from 'rxjs';
+import { GameState } from '../models/game-state.model';
 import { GameStateLoggerService } from './logging/game-state-logger.service';
-import { InventoryLoggerService } from './logging/inventory-logger.service';
+
+const STORAGE_KEY = 'zork_game_state';
 
 @Injectable({
-    providedIn: 'root'
+  providedIn: 'root'
 })
 export class GameStateService {
-    private gameState: GameState = {
-        currentScene: 'west-of-house',
-        flags: [],
-        inventory: [],
-        score: 0,
-        moves: 0,
-        gameOver: false,
-        gameWon: false
+  private state: GameState = {
+    currentScene: '',
+    inventory: {},
+    flags: {},
+    score: 0,
+    moves: 0,
+    knownObjects: new Set<string>(),
+    gameOver: false,
+    gameWon: false
+  };
+
+  private stateSubject = new BehaviorSubject<GameState>(this.state);
+  state$ = this.stateSubject.asObservable();
+
+  constructor(private logger: GameStateLoggerService) {}
+
+  getCurrentState(): GameState {
+    return this.state;
+  }
+
+  initializeState(sceneId: string) {
+    this.state = {
+      currentScene: sceneId,
+      inventory: {},
+      flags: {},
+      score: 0,
+      moves: 0,
+      knownObjects: new Set<string>(),
+      gameOver: false,
+      gameWon: false
     };
-    private gameStateSubject = new BehaviorSubject<GameState>(this.gameState);
-    gameState$ = this.gameStateSubject.asObservable();
+    this.stateSubject.next(this.state);
+    this.saveGame();
+  }
 
-    constructor(
-        private gameStateLogger: GameStateLoggerService,
-        private inventoryLogger: InventoryLoggerService
-    ) {}
+  setCurrentScene(sceneId: string) {
+    this.state = {
+      ...this.state,
+      currentScene: sceneId
+    };
+    this.stateSubject.next(this.state);
+    this.saveGame();
+  }
 
-    getCurrentState(): GameState {
-        return this.gameState;
-    }
-
-    updateState(updates: Partial<GameState>): void {
-        this.gameStateLogger.logStateUpdate(this.gameState, updates);
-        this.gameState = { ...this.gameState, ...updates };
-        this.gameStateSubject.next(this.gameState);
-    }
-
-    addToInventory(objectId: string): void {
-        if (!this.gameState.inventory.includes(objectId)) {
-            this.inventoryLogger.logInventoryAdd(objectId, this.gameState.inventory);
-            this.updateState({
-                inventory: [...this.gameState.inventory, objectId]
-            });
+  addToInventory(itemId: string) {
+    if (!this.state.inventory[itemId]) {
+      this.state = {
+        ...this.state,
+        inventory: {
+          ...this.state.inventory,
+          [itemId]: true
         }
+      };
+      this.stateSubject.next(this.state);
+      this.saveGame();
     }
+  }
 
-    removeFromInventory(objectId: string): void {
-        this.inventoryLogger.logInventoryRemove(objectId, this.gameState.inventory);
-        this.updateState({
-            inventory: this.gameState.inventory.filter(id => id !== objectId)
-        });
-    }
+  removeFromInventory(itemId: string) {
+    const { [itemId]: _, ...remainingInventory } = this.state.inventory;
+    this.state = {
+      ...this.state,
+      inventory: remainingInventory
+    };
+    this.stateSubject.next(this.state);
+    this.saveGame();
+  }
 
-    addFlag(flag: string): void {
-        if (!this.gameState.flags.includes(flag)) {
-            this.gameStateLogger.logFlagAdd(flag, this.gameState.flags);
-            this.updateState({
-                flags: [...this.gameState.flags, flag]
-            });
-        }
-    }
+  setFlag(flag: string) {
+    this.state = {
+      ...this.state,
+      flags: {
+        ...this.state.flags,
+        [flag]: true
+      }
+    };
+    this.stateSubject.next(this.state);
+    this.saveGame();
+  }
 
-    removeFlag(flag: string): void {
-        this.gameStateLogger.logFlagRemove(flag, this.gameState.flags);
-        this.updateState({
-            flags: this.gameState.flags.filter(f => f !== flag)
-        });
-    }
+  removeFlag(flag: string) {
+    const { [flag]: _, ...remainingFlags } = this.state.flags;
+    this.state = {
+      ...this.state,
+      flags: remainingFlags
+    };
+    this.stateSubject.next(this.state);
+    this.saveGame();
+  }
 
-    incrementMoves(): void {
-        this.gameStateLogger.logMovesIncrement(this.gameState.moves);
-        this.updateState({
-            moves: this.gameState.moves + 1
-        });
-    }
+  hasFlag(flag: string): boolean {
+    return !!this.state.flags[flag];
+  }
 
-    incrementScore(points: number): void {
-        this.gameStateLogger.logScoreChange(this.gameState.score, points);
-        this.updateState({
-            score: this.gameState.score + points
-        });
+  addScore(points: number) {
+    this.state = {
+      ...this.state,
+      score: this.state.score + points
+    };
+    this.stateSubject.next(this.state);
+    this.saveGame();
+  }
+
+  incrementMoves() {
+    this.state = {
+      ...this.state,
+      moves: this.state.moves + 1
+    };
+    this.stateSubject.next(this.state);
+    this.saveGame();
+  }
+
+  addKnownObject(objectId: string) {
+    this.state.knownObjects.add(objectId);
+    this.stateSubject.next(this.state);
+    this.saveGame();
+  }
+
+  setGameOver(won: boolean = false) {
+    this.state = {
+      ...this.state,
+      gameOver: true,
+      gameWon: won
+    };
+    this.stateSubject.next(this.state);
+    this.saveGame();
+  }
+
+  // Save/Load functionality
+  saveGame() {
+    const saveState = {
+      ...this.state,
+      knownObjects: Array.from(this.state.knownObjects)
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saveState));
+    this.logger.logState('Game saved', this.state);
+  }
+
+  loadGame(): boolean {
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    if (savedState) {
+      try {
+        const parsedState = JSON.parse(savedState);
+        this.state = {
+          ...parsedState,
+          knownObjects: new Set(parsedState.knownObjects)
+        };
+        this.stateSubject.next(this.state);
+        this.logger.logState('Game loaded', this.state);
+        return true;
+      } catch (error) {
+        console.error('Error loading saved game:', error);
+        return false;
+      }
     }
+    return false;
+  }
+
+  hasSavedGame(): boolean {
+    return localStorage.getItem(STORAGE_KEY) !== null;
+  }
+
+  clearSavedGame() {
+    localStorage.removeItem(STORAGE_KEY);
+    this.logger.logState('Game cleared', this.state);
+  }
 }

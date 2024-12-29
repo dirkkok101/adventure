@@ -1,15 +1,15 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { GameComponent } from './components/game/game.component';
+import { RouterOutlet } from '@angular/router';
 
 @Component({
     selector: 'app-root',
     standalone: true,
-    imports: [CommonModule, GameComponent],
+    imports: [CommonModule, RouterOutlet],
     template: `
         <div class="app-container">
             <h1>Text Adventure</h1>
-            <app-game></app-game>
+            <router-outlet></router-outlet>
         </div>
     `,
     styles: [`
@@ -19,16 +19,14 @@ import { GameComponent } from './components/game/game.component';
             color: #00ff00;
             display: flex;
             flex-direction: column;
+            align-items: center;
+            padding: 2rem;
         }
 
         h1 {
-            text-align: center;
-            margin: 10px 0;
             font-family: monospace;
-            flex-shrink: 0;
+            margin-bottom: 2rem;
         }
     `]
 })
-export class AppComponent {
-    title = 'Text Adventure';
-}
+export class AppComponent {}

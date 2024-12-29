@@ -1,9 +1,10 @@
 import { Injectable } from '@angular/core';
 import { Command } from '../../models/command.model';
-import { CommandHandler } from './command-handler.interface';
+import { GameState, SceneInteraction } from '../../models/game-state.model';
 import { SceneService } from '../scene.service';
 import { GameStateService } from '../game-state.service';
-import { processInteraction, checkRequiredFlags } from '../../utils/interaction-utils';
+import { handleInteraction } from '../../data/game-mechanics';
+import { CommandHandler } from './command-handler.interface';
 
 @Injectable({
     providedIn: 'root'
@@ -14,37 +15,51 @@ export class ExamineCommandService implements CommandHandler {
         private gameState: GameStateService
     ) {}
 
-    canHandle(command: Command): boolean {
-        return command.verb === 'examine' || command.verb === 'x';
+    processCommand(command: Command): string {
+        if (!command.object) {
+            return "What do you want to examine?";
+        }
+
+        return this.examineObject(command.object);
     }
 
-    handle(command: Command): string {
-        if (!command.object) {
-            return 'What do you want to examine?';
-        }
-
-        const scene = this.sceneService.getCurrentScene();
-        if (!scene?.objects?.[command.object]) {
-            return `I don't see any ${command.object} here.`;
-        }
-
-        const object = scene.objects[command.object];
-        const interaction = object.interactions?.['examine'];
-        if (!interaction) {
-            return object.descriptions.default;
-        }
-
+    private examineObject(objectName: string): string {
         const state = this.gameState.getCurrentState();
-        
-        // Check if the interaction is allowed based on flags
-        if (interaction.requiredFlags) {
-            const canInteract = checkRequiredFlags(state, interaction.requiredFlags);
-            if (!canInteract) {
-                return interaction.failureMessage || `You cannot examine that.`;
-            }
+        const scene = this.sceneService.getCurrentScene();
+
+        if (!scene) {
+            return "Error: No current scene";
         }
 
-        // Process the interaction and update game state
-        return processInteraction(interaction, state);
+        // First check inventory
+        const inventoryObject = Object.values(scene.objects || {}).find(obj => 
+            obj.name.toLowerCase() === objectName.toLowerCase() && 
+            state.inventory[obj.id]
+        );
+
+        if (inventoryObject) {
+            const interaction = inventoryObject.interactions?.['examine'];
+            if (interaction) {
+                return handleInteraction(interaction, state);
+            }
+            return inventoryObject.descriptions.default;
+        }
+
+        // Then check visible objects in the scene
+        const sceneObject = Object.values(scene.objects || {}).find(obj => {
+            const isVisible = obj.visibleOnEntry || state.flags[`revealed_${obj.id}`];
+            return obj.name.toLowerCase() === objectName.toLowerCase() && isVisible;
+        });
+
+        if (!sceneObject) {
+            return "You don't see that here.";
+        }
+
+        const interaction = sceneObject.interactions?.['examine'];
+        if (interaction) {
+            return handleInteraction(interaction, state);
+        }
+
+        return sceneObject.descriptions.default;
     }
 }

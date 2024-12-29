@@ -6,11 +6,11 @@ export const westOfHouse: Scene = {
     region: 'Outside House',
     light: true,
     descriptions: {
-        default: 'You are standing in an open field west of a white house, with a boarded front door. There is a small mailbox here.',
+        default: 'You are standing in an open field west of a white house, with a boarded front door. A small window is visible on this side of the house. There is a small mailbox here.',
         states: {
-            'mailboxOpen': 'You are standing in an open field west of a white house, with a boarded front door. There is a small mailbox here, its door open, revealing a leaflet inside.',
-            'mailboxEmpty': 'You are standing in an open field west of a white house, with a boarded front door. There is a small mailbox here, its door open and empty.',
-            'windowOpen': 'You are standing in an open field west of a white house. There is a small mailbox here. The window is open.'
+            'mailboxOpen': 'You are standing in an open field west of a white house, with a boarded front door. A small window is visible on this side of the house. There is a small mailbox here, its door open, revealing a leaflet inside.',
+            'mailboxEmpty': 'You are standing in an open field west of a white house, with a boarded front door. A small window is visible on this side of the house. There is a small mailbox here, its door open and empty.',
+            'windowOpen': 'You are standing in an open field west of a white house. A window on this side of the house stands open. There is a small mailbox here.'
         }
     },
     objects: {

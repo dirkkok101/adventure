@@ -1,57 +1,64 @@
 import { Injectable } from '@angular/core';
-import { SceneValidatorService } from './validators/scene/scene-validator.service';
+import { Observable } from 'rxjs';
+import { GameStateService } from './game-state.service';
+import { SceneService } from './scene.service';
 import { CommandService } from './commands/command.service';
 import { UIService } from './ui.service';
-import { SceneService } from './scene.service';
-import { GameStateService } from './game-state.service';
+import { Scene } from '../models/game-state.model';
 
 @Injectable({
     providedIn: 'root'
 })
 export class GameService {
     constructor(
-        private sceneValidator: SceneValidatorService,
-        private commandService: CommandService,
-        private uiService: UIService,
+        private gameState: GameStateService,
         private sceneService: SceneService,
-        private gameState: GameStateService
+        private commandService: CommandService,
+        private uiService: UIService
     ) {}
 
-    initializeGame() {
-        // First validate all scenes
-        const validationSummary = this.sceneValidator.validateAllScenes();
-        if (validationSummary.errors > 0 || validationSummary.warnings > 0) {
-            console.log(validationSummary.toString());
+    initializeGame(): void {
+        // Initialize game state with starting scene
+        this.gameState.initializeState('westOfHouse');
+
+        // Set initial scene
+        const scene = this.getCurrentScene();
+        if (!scene) {
+            throw new Error('No initial scene found');
         }
 
-        // Then initialize the game
-        this.sceneService.initializeScene('westOfHouse');
-        const scene = this.sceneService.getCurrentScene();
-        if (scene) {
-            this.uiService.appendToGameText(this.sceneService.getSceneDescription(scene));
-        }
+        // Display initial scene description
+        const description = this.sceneService.getSceneDescription(scene);
+        this.uiService.appendToGameText(description);
         this.uiService.updateSidebar();
     }
 
-    processInput(input: string): string {
-        // First show what the user typed
+    getCurrentScene(): Scene | null {
+        return this.sceneService.getCurrentScene();
+    }
+
+    processCommand(input: string): void {
+        // Process the command
+        const response = this.commandService.processCommand(input);
+
+        // Update UI
         this.uiService.appendToGameText(`> ${input}`);
-
-        // Process the command and get the response
-        const response = this.commandService.processInput(input);
-
-        // Show the response and update the UI
         this.uiService.appendToGameText(response);
         this.uiService.updateSidebar();
 
-        return response;
+        // Check game state
+        const state = this.gameState.getCurrentState();
+        if (state.gameOver) {
+            this.handleGameOver(state.gameWon);
+        }
     }
 
-    get gameText$() {
-        return this.uiService.gameText$;
-    }
-
-    get sidebar$() {
-        return this.uiService.sidebar$;
+    private handleGameOver(won: boolean): void {
+        const message = won ? 
+            "Congratulations! You've won the game!" : 
+            "Game Over. Better luck next time!";
+        
+        this.uiService.appendToGameText(message);
+        this.uiService.appendToGameText(`Final Score: ${this.gameState.getCurrentState().score}`);
     }
 }

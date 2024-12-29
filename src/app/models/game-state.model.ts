@@ -1,9 +1,10 @@
 export interface GameState {
     currentScene: string;
-    inventory: string[];
-    flags: string[];
+    inventory: { [key: string]: boolean };
+    flags: { [key: string]: boolean };
     score: number;
     moves: number;
+    knownObjects: Set<string>;
     gameOver: boolean;
     gameWon: boolean;
 }
@@ -51,18 +52,13 @@ export interface SceneExit {
 
 export interface SceneInteraction {
     message: string;
-    failureMessage?: string;
+    states?: { [key: string]: string };
     requiredFlags?: string[];
     grantsFlags?: string[];
     removesFlags?: string[];
+    failureMessage?: string;
     revealsObjects?: string[];
-    states?: { [key: string]: string };
     score?: number;
-    modifiesContainer?: {
-        action: 'add' | 'remove';
-        items: string[];
-    };
-    grantsCommands?: string[];
 }
 
 export interface GameCommand {

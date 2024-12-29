@@ -1,16 +1,8 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable } from 'rxjs';
-import { Scene } from '../models/game-state.model';
-import { GameStateService } from './game-state.service';
+import { BehaviorSubject } from 'rxjs';
 import { SceneService } from './scene.service';
-
-interface SidebarState {
-    commands: string;
-    exits: string;
-    objects: string;
-    score: number;
-    moves: number;
-}
+import { GameStateService } from './game-state.service';
+import { CommandService } from './commands/command.service';
 
 @Injectable({
     providedIn: 'root'
@@ -19,79 +11,88 @@ export class UIService {
     private gameTextSubject = new BehaviorSubject<string[]>([]);
     gameText$ = this.gameTextSubject.asObservable();
 
-    private sidebarSubject = new BehaviorSubject<SidebarState>({
+    private sidebarSubject = new BehaviorSubject<{
+        commands: string;
+        objects: string;
+        score: number;
+        moves: number;
+        exits: string;
+    }>({
         commands: '',
-        exits: '',
         objects: '',
         score: 0,
-        moves: 0
+        moves: 0,
+        exits: ''
     });
     sidebar$ = this.sidebarSubject.asObservable();
 
-    private knownObjects: Set<string> = new Set();
-
     constructor(
+        private sceneService: SceneService,
         private gameState: GameStateService,
-        private sceneService: SceneService
+        private commandService: CommandService
     ) {}
 
     appendToGameText(text: string): void {
-        console.log('\n=== Appending Game Text ===');
-        console.log('Text:', text);
-        
         const currentText = this.gameTextSubject.value;
-        this.gameTextSubject.next([...currentText, text]);
+        const newLines = text.split('\n');
+        this.gameTextSubject.next([...currentText, ...newLines]);
     }
 
-    getKnownObjects(): Set<string> {
-        return this.knownObjects;
-    }
-
-    addKnownObject(objectName: string): void {
-        console.log('\n=== Adding Known Object ===');
-        console.log('Object:', objectName);
-        
-        console.log('Known objects before:', [...this.knownObjects]);
-        this.knownObjects.add(objectName);
-        console.log('Known objects after:', [...this.knownObjects]);
+    clearGameText(): void {
+        this.gameTextSubject.next([]);
     }
 
     updateSidebar(): void {
-        console.log('\n=== Updating Sidebar ===');
-        
         const scene = this.sceneService.getCurrentScene();
-        if (!scene) return;
-
         const state = this.gameState.getCurrentState();
-        console.log('Current State:', {
-            flags: state.flags,
-            inventory: state.inventory,
-            score: state.score,
-            moves: state.moves
-        });
 
-        // Basic commands that are always available
-        const baseCommands = ['look', 'examine (x)', 'inventory (i)', 'take', 'use', 'open', 'close', 'read'];
-        
-        // Available exits with descriptions
-        const availableExits = this.sceneService.getAvailableExits(scene)
-            .map(exit => `${exit.direction} - ${exit.description}`);
+        if (!scene) {
+            console.error('No current scene found');
+            return;
+        }
 
-        // Visible objects and inventory items
-        const visibleObjects = this.sceneService.getVisibleObjects(scene);
-        console.log('Visible Objects:', visibleObjects);
-        console.log('Known Objects Set:', [...this.knownObjects]);
-        console.log('Inventory:', state.inventory);
+        // Get known objects
+        const knownObjects = Array.from(state.knownObjects)
+            .map(id => {
+                const obj = scene.objects?.[id];
+                return obj ? obj.name : null;
+            })
+            .filter(name => name !== null)
+            .sort()
+            .join('\n');
 
-        const knownObjects = [...new Set([...visibleObjects, ...state.inventory, ...this.knownObjects])].sort();
-        console.log('Combined Known Objects:', knownObjects);
+        // Get available exits
+        const exits = (scene.exits ?? [])
+            .map(exit => {
+                if (exit.requiredFlags && 
+                    !exit.requiredFlags.every(flag => state.flags[flag])) {
+                    return null;
+                }
+                return exit.direction.charAt(0).toUpperCase() + exit.direction.slice(1);
+            })
+            .filter((exit): exit is string => exit !== null)
+            .join('\n');
+
+        // Get basic commands
+        const basicCommands = [
+            'Look (l)',
+            'Examine (x) [object]',
+            'Inventory (i)',
+            'Take/Get [object]',
+            'Drop [object]',
+            'Open [object]',
+            'Close [object]',
+            'Read [object]',
+            'Enter [object/direction]',
+            'Go [direction]'
+        ].join('\n');
 
         this.sidebarSubject.next({
-            commands: baseCommands.sort().join(', '),
-            exits: availableExits.join('\n'),
-            objects: knownObjects.join(', '),
+            commands: basicCommands,
+            objects: knownObjects || 'No known objects',
             score: state.score,
-            moves: state.moves
+            moves: state.moves,
+            exits: exits || 'No visible exits',
         });
     }
 }

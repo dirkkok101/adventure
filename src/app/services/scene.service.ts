@@ -1,157 +1,112 @@
 import { Injectable } from '@angular/core';
-import { Scene, SceneExit } from '../models/game-state.model';
-import { scenes } from '../data/scenes';
+import { Scene, SceneObject } from '../models/game-state.model';
 import { GameStateService } from './game-state.service';
-import { checkRequiredFlags } from '../utils/interaction-utils';
-import { SceneStateLoggerService } from './logging/scene-state-logger.service';
+import { scenes } from '../data/scenes';
 
 @Injectable({
     providedIn: 'root'
 })
 export class SceneService {
-    constructor(
-        private gameState: GameStateService,
-        private logger: SceneStateLoggerService
-    ) {}
+    constructor(private gameState: GameStateService) {}
 
-    getCurrentScene(): Scene | undefined {
-        const currentSceneId = this.gameState.getCurrentState().currentScene;
-        return scenes[currentSceneId];
+    getCurrentScene(): Scene | null {
+        const state = this.gameState.getCurrentState();
+        return scenes[state.currentScene] || null;
     }
 
-    initializeScene(sceneId: string): void {
-        this.logger.logSceneInitialization(sceneId);
-        this.gameState.updateState({ currentScene: sceneId });
+    getAllScenes(): Scene[] {
+        return Object.values(scenes);
+    }
+
+    getSceneById(id: string): Scene | null {
+        return scenes[id] || null;
+    }
+
+    moveToScene(direction: string): string {
+        const currentScene = this.getCurrentScene();
+        if (!currentScene) {
+            return "Error: No current scene";
+        }
+
+        const exit = currentScene.exits?.find(e => e.direction.toLowerCase() === direction.toLowerCase());
+        if (!exit) {
+            return "You can't go that way.";
+        }
+
+        // Check if the exit has required flags
+        if (exit.requiredFlags) {
+            const state = this.gameState.getCurrentState();
+            const hasRequiredFlags = exit.requiredFlags.every(flag => state.flags[flag]);
+            if (!hasRequiredFlags) {
+                return exit.failureMessage || "You can't go that way right now.";
+            }
+        }
+
+        const targetScene = this.getSceneById(exit.targetScene);
+        if (!targetScene) {
+            return "Error: Invalid target scene";
+        }
+
+        // Update game state with new scene
+        this.gameState.setCurrentScene(exit.targetScene);
+
+        // Return the description of the new scene
+        return this.getSceneDescription(targetScene);
     }
 
     getSceneDescription(scene: Scene): string {
         const state = this.gameState.getCurrentState();
-        this.logger.logSceneDescription(scene, state.flags);
 
-        // Get base description, considering state-based variations
-        let description = scene.descriptions.default;
+        // Check for state-specific descriptions
         if (scene.descriptions.states) {
-            for (const [flag, stateDesc] of Object.entries(scene.descriptions.states)) {
-                if (state.flags.includes(flag)) {
-                    description = stateDesc;
-                    break;
+            for (const [flagCombo, description] of Object.entries(scene.descriptions.states)) {
+                const flags = flagCombo.split(',');
+                if (flags.every(flag => {
+                    if (flag.startsWith('!')) {
+                        return !state.flags[flag.substring(1)];
+                    }
+                    return !!state.flags[flag];
+                })) {
+                    return this.addVisibleObjects(scene, description);
                 }
             }
         }
 
-        // Get visible objects, including both visibleOnEntry and revealed objects
-        const visibleObjects = scene.objects ? 
-            Object.entries(scene.objects)
-                .filter(([id, obj]) => {
-                    const isVisibleByDefault = obj.visibleOnEntry ?? false;
-                    const isRevealedByFlag = state.flags.some(flag => flag === `revealed_${id}`);
-                    const isVisibleByExamineFlags = (obj.interactions?.['examine']?.requiredFlags || []).every(flag => 
-                        flag.startsWith('!') ? !state.flags.includes(flag.slice(1)) : 
-                        state.flags.includes(flag)
-                    );
-
-                    this.logger.logObjectVisibility(id, {
-                        isVisibleByDefault,
-                        isRevealedByFlag,
-                        isVisibleByExamineFlags,
-                        flags: state.flags
-                    });
-
-                    return isVisibleByDefault || isRevealedByFlag || isVisibleByExamineFlags;
-                })
-                .map(([_, obj]) => {
-                    // Get state-specific description if available
-                    if (obj.descriptions.states) {
-                        for (const [flag, stateDesc] of Object.entries(obj.descriptions.states)) {
-                            if (state.flags.includes(flag)) {
-                                return stateDesc;
-                            }
-                        }
-                    }
-                    return obj.descriptions.default;
-                })
-            : [];
-
-        this.logger.logVisibleObjects(visibleObjects);
-
-        if (visibleObjects.length > 0) {
-            description += '\n\n' + visibleObjects.join('\n');
-        }
-
-        // Add obvious exits
-        const exits = this.getAvailableExits(scene);
-        if (exits.length > 0) {
-            description += '\n\nObvious exits:';
-            exits.forEach(exit => {
-                description += `\n${exit.direction} - ${exit.description}`;
-            });
-        }
-
-        return description;
-    }
-
-    getAvailableExits(scene: Scene): SceneExit[] {
-        if (!scene.exits) return [];
-        
-        const state = this.gameState.getCurrentState();
-        const exits = scene.exits.filter(exit => !exit.requiredFlags || checkRequiredFlags(state, exit.requiredFlags));
-        
-        this.logger.logAvailableExits(exits);
-        return exits;
-    }
-
-    canMove(direction: string): { canMove: boolean; message?: string; targetScene?: string } {
-        const scene = this.getCurrentScene();
-        if (!scene) {
-            return { canMove: false, message: 'Error: Invalid scene' };
-        }
-
-        const exit = scene.exits?.find(e => e.direction === direction);
-        this.logger.logMovementCheck(direction, scene, exit);
-
-        if (!exit) {
-            return { canMove: false, message: 'You cannot go that way.' };
-        }
-
-        const state = this.gameState.getCurrentState();
-        if (exit.requiredFlags && !checkRequiredFlags(state, exit.requiredFlags)) {
-            return { canMove: false, message: exit.failureMessage || 'You cannot go that way.' };
-        }
-
-        return { canMove: true, targetScene: exit.targetScene };
+        // Return default description if no state-specific description matches
+        return this.addVisibleObjects(scene, scene.descriptions.default);
     }
 
     getVisibleObjects(scene: Scene): string[] {
-        if (!scene.objects) return [];
         const state = this.gameState.getCurrentState();
-        
-        return Object.entries(scene.objects)
-            .filter(([id, obj]) => {
+        if (!scene.objects) return [];
+
+        return Object.values(scene.objects)
+            .filter(obj => {
                 const isVisibleByDefault = obj.visibleOnEntry ?? false;
-                const isRevealedByFlag = state.flags.some(flag => flag === `revealed_${id}`);
-                const isVisibleByExamineFlags = (obj.interactions?.['examine']?.requiredFlags || []).every(flag => 
-                    flag.startsWith('!') ? !state.flags.includes(flag.slice(1)) : 
-                    state.flags.includes(flag)
-                );
-                return isVisibleByDefault || isRevealedByFlag || isVisibleByExamineFlags;
+                const isRevealed = !!state.flags[`revealed_${obj.id}`];
+                return isVisibleByDefault || isRevealed;
             })
-            .map(([_, obj]) => obj.name);
+            .map(obj => obj.name);
     }
 
-    revealObject(objectId: string): void {
-        const scene = this.getCurrentScene();
-        if (!scene?.objects?.[objectId]) {
-            return;
-        }
+    getAvailableExits(scene: Scene): string[] {
+        if (!scene.exits) return [];
 
-        this.logger.logObjectReveal(objectId, scene);
-
-        const revealFlag = `revealed_${objectId}`;
         const state = this.gameState.getCurrentState();
-        if (!state.flags.includes(revealFlag)) {
-            this.gameState.updateState({
-                flags: [...state.flags, revealFlag]
-            });
+        return scene.exits
+            .filter(exit => {
+                if (!exit.requiredFlags) return true;
+                return exit.requiredFlags.every(flag => state.flags[flag]);
+            })
+            .map(exit => exit.direction);
+    }
+
+    private addVisibleObjects(scene: Scene, baseDescription: string): string {
+        const visibleObjects = this.getVisibleObjects(scene);
+        if (visibleObjects.length === 0) {
+            return baseDescription;
         }
+
+        return `${baseDescription}\n\nYou can see:\n${visibleObjects.map(obj => `- ${obj}`).join('\n')}`;
     }
 }
