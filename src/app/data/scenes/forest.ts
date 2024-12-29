@@ -14,7 +14,9 @@ export const forest: Scene = {
     objects: {
         tree: {
             id: 'tree',
-            name: 'tree',
+            name: 'Tree',
+            visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'A tall tree with thick branches.'
             },

@@ -17,6 +17,7 @@ export const attic: Scene = {
             id: 'furniture',
             name: 'Covered Furniture',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'Several pieces of old furniture are covered with white sheets.'
             },
@@ -35,6 +36,7 @@ export const attic: Scene = {
             id: 'window',
             name: 'Large Window',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'A large window offers a view of the front lawn.'
             },
@@ -82,6 +84,7 @@ export const attic: Scene = {
             id: 'beam',
             name: 'Wooden Beam',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'Sturdy wooden beams support the roof of the attic.'
             },

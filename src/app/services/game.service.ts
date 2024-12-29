@@ -4,7 +4,7 @@ import { Scene, SceneObject, SceneExit, GameState, SceneInteraction } from '../m
 import { scenes } from '../data/scenes';
 import { verbSynonyms } from '../data/game-mechanics';
 import { ParserService } from './parser.service';
-import { SceneValidatorService } from './scene-validator.service';
+import { SceneValidatorService } from './validators/scene/scene-validator.service';
 import { checkRequiredFlags, processInteraction } from '../data/game-mechanics';
 
 interface Command {
@@ -55,19 +55,16 @@ export class GameService {
         this.gameStateSubject = new BehaviorSubject<GameState>(this.gameState);
         this.gameState$ = this.gameStateSubject.asObservable();
         this.validateScenes();
-        this.initializeScene('west_of_house');
+        this.initializeScene('westOfHouse');
         this.updateSidebar();
         const response = this.executeCommand({ verb: 'look', originalInput: 'look' });
         this.appendToGameText(response);
     }
 
     private validateScenes(): void {
-        for (const [id, scene] of Object.entries(scenes)) {
-            const errors = this.sceneValidator.validateScene(scene);
-            if (errors.length > 0) {
-                console.error(`Validation errors in scene '${id}':`);
-                errors.forEach(error => console.error(`- ${error}`));
-            }
+        const validationSummary = this.sceneValidator.validateAllScenes();
+        if (validationSummary.errors > 0 || validationSummary.warnings > 0) {
+            console.log(validationSummary.toString());
         }
     }
 

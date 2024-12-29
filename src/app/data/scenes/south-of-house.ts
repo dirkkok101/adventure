@@ -13,6 +13,7 @@ export const southOfHouse: Scene = {
             id: 'house',
             name: 'White House',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'The house is a beautiful colonial house which is painted white. It is clear that the owners must have been quite wealthy.'
             },
@@ -30,6 +31,7 @@ export const southOfHouse: Scene = {
             id: 'windows',
             name: 'Boarded Windows',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'The windows are all boarded up.'
             },

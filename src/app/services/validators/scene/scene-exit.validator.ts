@@ -1,58 +1,73 @@
-import { Scene } from '../../../models/game-state.model';
+import { Scene, SceneExit } from '../../../models/game-state.model';
 import { ValidationError } from '../validation-error.model';
-import { scenes } from '../../../data/scenes';
 
 export class SceneExitValidator {
     validateSceneExits(sceneId: string, scene: Scene): ValidationError[] {
         const errors: ValidationError[] = [];
+        const path = `${sceneId}.exits`;
 
         if (!scene.exits) {
             errors.push({
                 scene: sceneId,
-                type: 'warning',
-                message: 'Scene has no exits'
+                type: 'error',
+                message: 'Scene has no exits defined',
+                path,
+                fix: 'Add exits array to scene'
             });
             return errors;
         }
 
-        for (const exit of scene.exits) {
-            if (!exit.direction) {
-                errors.push({
-                    scene: sceneId,
-                    type: 'error',
-                    message: 'Exit missing direction'
-                });
-            }
+        scene.exits.forEach((exit, index) => {
+            errors.push(...this.validateExit(sceneId, exit, index));
+        });
 
-            if (!exit.targetScene) {
-                errors.push({
-                    scene: sceneId,
-                    type: 'error',
-                    message: `Exit ${exit.direction} missing target scene`
-                });
-            } else if (!scenes[exit.targetScene]) {
-                errors.push({
-                    scene: sceneId,
-                    type: 'error',
-                    message: `Exit ${exit.direction} points to non-existent scene ${exit.targetScene}`
-                });
-            }
+        return errors;
+    }
 
-            if (!exit.description) {
-                errors.push({
-                    scene: sceneId,
-                    type: 'warning',
-                    message: `Exit ${exit.direction} missing description`
-                });
-            }
+    private validateExit(sceneId: string, exit: SceneExit, index: number): ValidationError[] {
+        const errors: ValidationError[] = [];
+        const path = `exits[${index}]`;
 
-            if (exit.requiredFlags && exit.requiredFlags.length > 0 && !exit.failureMessage) {
-                errors.push({
-                    scene: sceneId,
-                    type: 'warning',
-                    message: `Exit ${exit.direction} has required flags but no failure message`
-                });
-            }
+        // Required fields
+        if (!exit.direction) {
+            errors.push({
+                scene: sceneId,
+                type: 'error',
+                message: `Exit ${index} missing required field: direction`,
+                path: `${path}.direction`,
+                fix: 'Add direction (north, south, east, west, up, down)'
+            });
+        }
+
+        if (!exit.targetScene) {
+            errors.push({
+                scene: sceneId,
+                type: 'error',
+                message: `Exit ${index} missing required field: targetScene`,
+                path: `${path}.targetScene`,
+                fix: 'Add targetScene (id of destination scene)'
+            });
+        }
+
+        if (!exit.description) {
+            errors.push({
+                scene: sceneId,
+                type: 'error',
+                message: `Exit ${index} missing required field: description`,
+                path: `${path}.description`,
+                fix: 'Add description of where the exit leads'
+            });
+        }
+
+        // Validate conditional exits
+        if (exit.requiredFlags && exit.requiredFlags.length > 0 && !exit.failureMessage) {
+            errors.push({
+                scene: sceneId,
+                type: 'warning',
+                message: `Exit ${index} has required flags but no failure message`,
+                path: `${path}.failureMessage`,
+                fix: 'Add failureMessage for when flags are not met'
+            });
         }
 
         return errors;

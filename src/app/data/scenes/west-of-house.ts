@@ -9,7 +9,8 @@ export const westOfHouse: Scene = {
         default: 'You are standing in an open field west of a white house, with a boarded front door. There is a small mailbox here.',
         states: {
             'mailboxOpen': 'You are standing in an open field west of a white house, with a boarded front door. There is a small mailbox here, its door open.',
-            'mailboxEmpty': 'You are standing in an open field west of a white house, with a boarded front door. There is a small mailbox here, its door open and empty.'
+            'mailboxEmpty': 'You are standing in an open field west of a white house, with a boarded front door. There is a small mailbox here, its door open and empty.',
+            'windowOpen': 'You are standing in an open field west of a white house. There is a small mailbox here. The window is open.'
         }
     },
     objects: {
@@ -17,6 +18,7 @@ export const westOfHouse: Scene = {
             id: 'house',
             name: 'White House',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'The house is a beautiful colonial house which is painted white. It is clear that the owners must have been quite wealthy.'
             },
@@ -30,10 +32,47 @@ export const westOfHouse: Scene = {
                 }
             } as { [key: string]: SceneInteraction }
         } as SceneObject,
+        window: {
+            id: 'window',
+            name: 'Window',
+            visibleOnEntry: true,
+            canTake: false,
+            descriptions: {
+                default: 'The window is slightly ajar.',
+                states: {
+                    'windowOpen': 'The window is open.'
+                }
+            },
+            interactions: {
+                examine: {
+                    message: 'The window is slightly ajar. It looks like it could be opened wider.',
+                    states: {
+                        'windowOpen': 'The window is wide open, revealing the kitchen inside.'
+                    }
+                },
+                open: {
+                    message: 'With a little effort, you open the window wide enough to enter.',
+                    grantsFlags: ['windowOpen'],
+                    requiredFlags: ['!windowOpen'],
+                    score: 5
+                },
+                close: {
+                    message: 'You close the window.',
+                    removesFlags: ['windowOpen'],
+                    requiredFlags: ['windowOpen']
+                },
+                enter: {
+                    message: 'You climb through the window into the kitchen.',
+                    requiredFlags: ['windowOpen'],
+                    failureMessage: 'The window needs to be opened wider first.'
+                }
+            } as { [key: string]: SceneInteraction }
+        } as SceneObject,
         mailbox: {
             id: 'mailbox',
             name: 'Mailbox',
             visibleOnEntry: true,
+            canTake: false,
             isContainer: true,
             isOpen: false,
             capacity: 1,
@@ -98,6 +137,7 @@ export const westOfHouse: Scene = {
             id: 'door',
             name: 'Front Door',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'The front door is boarded up.'
             },
@@ -124,11 +164,16 @@ export const westOfHouse: Scene = {
             description: 'The path leads south along the house.'
         },
         {
+            direction: 'west',
+            targetScene: 'forest',
+            description: 'A forest path leads west into the trees.'
+        },
+        {
             direction: 'east',
             targetScene: 'kitchen',
-            description: 'There is a path to the kitchen door.',
-            requiredFlags: ['kitchenDoorOpen'],
-            failureMessage: 'The kitchen door is closed.'
+            description: 'You can enter through the window.',
+            requiredFlags: ['windowOpen'],
+            failureMessage: 'The window needs to be opened first.'
         }
     ]
 };

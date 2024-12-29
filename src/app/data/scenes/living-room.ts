@@ -16,6 +16,7 @@ export const livingRoom: Scene = {
             id: 'trophyCase',
             name: 'Trophy Case',
             visibleOnEntry: true,
+            canTake: false,
             isContainer: true,
             isOpen: false,
             capacity: 10,
@@ -38,7 +39,7 @@ export const livingRoom: Scene = {
                 },
                 close: {
                     message: 'You close the trophy case.',
-                    removesFlags: ['trophyCaseOpen'],
+                    grantsFlags: ['!trophyCaseOpen'],
                     requiredFlags: ['trophyCaseOpen']
                 }
             } as { [key: string]: SceneInteraction }
@@ -47,6 +48,7 @@ export const livingRoom: Scene = {
             id: 'orientalRug',
             name: 'Oriental Rug',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'A large, ornate oriental rug covers part of the floor.',
                 states: {
@@ -77,6 +79,7 @@ export const livingRoom: Scene = {
             id: 'trapDoor',
             name: 'Trap Door',
             visibleOnEntry: false,
+            canTake: false,
             descriptions: {
                 default: 'A sturdy wooden trap door is set into the floor.',
                 states: {
@@ -99,7 +102,7 @@ export const livingRoom: Scene = {
                 },
                 close: {
                     message: 'You close the trap door with a solid thud.',
-                    removesFlags: ['trapDoorOpen'],
+                    grantsFlags: ['!trapDoorOpen'],
                     requiredFlags: ['trapDoorOpen']
                 }
             } as { [key: string]: SceneInteraction }
@@ -108,6 +111,7 @@ export const livingRoom: Scene = {
             id: 'gothicDoor',
             name: 'Gothic Door',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'A wooden door with gothic lettering leads east.',
                 states: {
@@ -131,11 +135,100 @@ export const livingRoom: Scene = {
                 },
                 close: {
                     message: 'You close the gothic door.',
-                    removesFlags: ['gothicDoorOpen'],
+                    grantsFlags: ['!gothicDoorOpen'],
                     requiredFlags: ['gothicDoorOpen']
                 }
             } as { [key: string]: SceneInteraction }
-        } as SceneObject
+        } as SceneObject,
+        sword: {
+            id: 'sword',
+            name: 'Elvish Sword',
+            visibleOnEntry: true,
+            canTake: true,
+            weight: 3,
+            descriptions: {
+                default: 'A finely crafted elvish sword lies against the wall. It glows with a faint blue light.',
+                states: {
+                    'swordTaken': 'The elvish sword glows with a faint blue light.'
+                }
+            },
+            interactions: {
+                examine: {
+                    message: 'The sword is of elvish workmanship. Strange runes are inscribed on its blade, and it glows with a faint blue light.',
+                    states: {
+                        'swordTaken': 'The elvish sword glows brighter when danger is near.'
+                    }
+                },
+                take: {
+                    message: 'You pick up the elvish sword. It feels perfectly balanced.',
+                    grantsFlags: ['hasSword', 'swordTaken'],
+                    score: 10
+                }
+            }
+        },
+        lantern: {
+            id: 'lantern',
+            name: 'Brass Lantern',
+            visibleOnEntry: true,
+            canTake: true,
+            weight: 2,
+            descriptions: {
+                default: 'A brass lantern is here.',
+                states: {
+                    'lanternOn': 'A brass lantern is here, providing light.',
+                    'lanternDead': 'A brass lantern is here, but its batteries are dead.'
+                }
+            },
+            interactions: {
+                examine: {
+                    message: 'The brass lantern looks sturdy and well-made. It requires batteries to work.',
+                    states: {
+                        'lanternOn': 'The brass lantern is on, casting a warm light.',
+                        'lanternDead': 'The lantern\'s batteries are dead.'
+                    }
+                },
+                take: {
+                    message: 'Taken.',
+                    grantsFlags: ['hasLantern']
+                },
+                on: {
+                    message: 'The lantern is now on.',
+                    grantsFlags: ['lanternOn', 'hasLight'],
+                    requiredFlags: ['hasLantern', '!lanternOn', '!lanternDead'],
+                    failureMessage: 'The lantern won\'t turn on. It needs batteries.'
+                },
+                off: {
+                    message: 'The lantern is now off.',
+                    grantsFlags: ['!lanternOn', '!hasLight'],
+                    requiredFlags: ['lanternOn']
+                }
+            }
+        },
+        batteries: {
+            id: 'batteries',
+            name: 'Fresh Batteries',
+            visibleOnEntry: true,
+            canTake: true,
+            weight: 1,
+            descriptions: {
+                default: 'There are some fresh batteries here.'
+            },
+            interactions: {
+                examine: {
+                    message: 'These are fresh D-cell batteries, perfect for the brass lantern.'
+                },
+                take: {
+                    message: 'Taken.',
+                    grantsFlags: ['hasBatteries']
+                },
+                use: {
+                    message: 'You install the fresh batteries in the lantern.',
+                    grantsFlags: ['lanternReady', '!lanternDead', '!hasBatteries'],
+                    requiredFlags: ['hasLantern', 'hasBatteries'],
+                    score: 5
+                }
+            }
+        }
     },
     exits: [
         {
@@ -146,16 +239,16 @@ export const livingRoom: Scene = {
         {
             direction: 'east',
             targetScene: 'closet',
-            description: 'A gothic door leads east to a closet.',
+            description: 'A wooden door with gothic lettering leads east.',
             requiredFlags: ['gothicDoorOpen'],
             failureMessage: 'The gothic door is closed.'
         },
         {
             direction: 'down',
             targetScene: 'cellar',
-            description: 'A trap door in the floor leads down to a cellar.',
-            requiredFlags: ['rugMoved', 'trapDoorOpen'],
-            failureMessage: 'You can\'t go that way.'
+            description: 'The trap door leads down to the cellar.',
+            requiredFlags: ['trapDoorOpen', 'hasLight'],
+            failureMessage: 'The trap door needs to be opened first.'
         }
     ]
 };

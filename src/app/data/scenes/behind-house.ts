@@ -17,6 +17,7 @@ export const behindHouse: Scene = {
             id: 'house',
             name: 'White House',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'The house is a beautiful colonial house which is painted white. It is clear that the owners must have been quite wealthy.'
             },
@@ -30,6 +31,7 @@ export const behindHouse: Scene = {
             id: 'window',
             name: 'Small Window',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'The window is slightly ajar.',
                 states: {
@@ -73,6 +75,7 @@ export const behindHouse: Scene = {
             id: 'pump',
             name: 'Water Pump',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'An old-fashioned water pump stands here. It looks like it might still work.'
             },
@@ -101,8 +104,9 @@ export const behindHouse: Scene = {
         } as SceneObject,
         path: {
             id: 'path',
-            name: 'Path',
+            name: 'Forest Path',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'A forest path leads east from here.'
             },

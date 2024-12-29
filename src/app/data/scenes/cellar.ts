@@ -17,6 +17,7 @@ export const cellar: Scene = {
             id: 'ramp',
             name: 'Metal Ramp',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'The ramp is made of smooth, polished metal and is too steep to climb.'
             },
@@ -36,6 +37,7 @@ export const cellar: Scene = {
             id: 'grue',
             name: 'Grue',
             visibleOnEntry: false,
+            canTake: false,
             descriptions: {
                 default: 'The grue is a sinister, lurking presence in the dark places of the earth. Its favorite diet is adventurers, but its insatiable appetite is tempered by its fear of light.'
             },
@@ -50,6 +52,7 @@ export const cellar: Scene = {
             id: 'walls',
             name: 'Cellar Walls',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'The walls are made of dirt and stone, with occasional wooden support beams.'
             },

@@ -16,6 +16,7 @@ export const northOfHouse: Scene = {
             id: 'house',
             name: 'White House',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'The house is a beautiful colonial house which is painted white. It is clear that the owners must have been quite wealthy.'
             },
@@ -33,6 +34,7 @@ export const northOfHouse: Scene = {
             id: 'windows',
             name: 'Windows',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'The windows are all boarded.'
             },
@@ -58,6 +60,7 @@ export const northOfHouse: Scene = {
             id: 'boards',
             name: 'Wooden Boards',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'The boards are firmly fastened across all the windows.'
             },
@@ -75,6 +78,7 @@ export const northOfHouse: Scene = {
             id: 'chimney',
             name: 'Chimney',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'The chimney rises up the side of the house. Wisps of smoke occasionally drift out.',
                 states: {
@@ -103,6 +107,7 @@ export const northOfHouse: Scene = {
             id: 'path',
             name: 'Path',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'The path is bordered by tall trees on both sides. Their branches form a canopy overhead.'
             },
@@ -116,6 +121,7 @@ export const northOfHouse: Scene = {
             id: 'trees',
             name: 'Trees',
             visibleOnEntry: true,
+            canTake: false,
             descriptions: {
                 default: 'The trees are very tall and old, their branches forming a thick canopy overhead.'
             },
@@ -138,8 +144,8 @@ export const northOfHouse: Scene = {
         },
         {
             direction: 'east',
-            targetScene: 'behindHouse',
-            description: 'The path leads east around the house.'
+            targetScene: 'clearing',
+            description: 'A path leads northeast to a clearing.'
         },
         {
             direction: 'north',
