@@ -1,8 +1,8 @@
-import { Component, ViewChild, ElementRef, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule, AsyncPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { GameService } from '../../services/game.service';
 import { Observable } from 'rxjs';
+import { GameService } from '../../services/game.service';
 
 @Component({
   selector: 'app-game',
@@ -10,22 +10,30 @@ import { Observable } from 'rxjs';
   imports: [CommonModule, FormsModule, AsyncPipe],
   template: `
     <div class="game-container">
-      <div class="game-text">
+      <div class="game-text" #gameOutput>
         <div *ngFor="let text of gameText$ | async">{{ text }}</div>
       </div>
       <div class="game-sidebar">
         <div class="sidebar-content">
           <div class="sidebar-section">
             <h3>Known Commands:</h3>
-            <div>{{ knownCommands$ | async }}</div>
+            <div>{{ (sidebar$ | async)?.commands }}</div>
           </div>
           <div class="sidebar-section">
             <h3>Known Objects:</h3>
-            <div>{{ knownObjects$ | async }}</div>
+            <div>{{ (sidebar$ | async)?.objects }}</div>
+          </div>
+          <div class="sidebar-section">
+            <h3>Score:</h3>
+            <div>{{ (sidebar$ | async)?.score }}</div>
+          </div>
+          <div class="sidebar-section">
+            <h3>Moves:</h3>
+            <div>{{ (sidebar$ | async)?.moves }}</div>
           </div>
         </div>
         <div class="game-input">
-          <input #commandInput
+          <input #gameInput
                  [(ngModel)]="currentCommand"
                  (keyup.enter)="onEnter()"
                  placeholder="Enter command...">
@@ -115,39 +123,47 @@ import { Observable } from 'rxjs';
   `]
 })
 export class GameComponent implements OnInit {
-  @ViewChild('commandInput') commandInput!: ElementRef;
-  
+  @ViewChild('gameInput') gameInput!: ElementRef;
+  @ViewChild('gameOutput') gameOutput!: ElementRef;
+
   currentCommand = '';
   shouldScroll = false;
 
   readonly gameText$: Observable<string[]>;
-  readonly knownCommands$: Observable<string>;
-  readonly knownObjects$: Observable<string>;
+  readonly sidebar$: Observable<{
+    commands: string;
+    objects: string;
+    score: number;
+    moves: number;
+  }>;
 
   constructor(private gameService: GameService) {
     this.gameText$ = this.gameService.gameText$;
-    this.knownCommands$ = this.gameService.knownCommands$;
-    this.knownObjects$ = this.gameService.knownObjects$;
+    this.sidebar$ = this.gameService.sidebar$;
   }
 
-  ngOnInit() {
-    // Focus the input
-    setTimeout(() => {
-      this.commandInput.nativeElement.focus();
-    });
-
-    // Subscribe to text changes to trigger scroll
-    this.gameText$.subscribe(() => {
-      this.shouldScroll = true;
-    });
+  ngOnInit(): void {
+    this.focusInput();
   }
 
   onEnter() {
     if (this.currentCommand.trim()) {
       this.gameService.processInput(this.currentCommand);
       this.currentCommand = '';
-      // Refocus the input after command
-      this.commandInput.nativeElement.focus();
+      this.scrollToBottom();
+      this.gameInput.nativeElement.focus();
     }
+  }
+
+  private focusInput(): void {
+    setTimeout(() => {
+      this.gameInput.nativeElement.focus();
+    });
+  }
+
+  private scrollToBottom(): void {
+    setTimeout(() => {
+      this.gameOutput.nativeElement.scrollTop = this.gameOutput.nativeElement.scrollHeight;
+    });
   }
 }
