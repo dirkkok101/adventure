@@ -39,7 +39,7 @@ export const kitchen: Scene = {
                 },
                 close: {
                     message: 'You close the window.',
-                    grantsFlags: ['!windowOpen'],
+                    removesFlags: ['windowOpen'],
                     requiredFlags: ['windowOpen']
                 }
             }
@@ -59,7 +59,10 @@ export const kitchen: Scene = {
                 examine: {
                     message: 'The table seems to have been used recently for the preparation of food. On it you can see a bottle of water and a clove of garlic.',
                     states: {
-                        'tableEmpty': 'The table is empty.'
+                        'tableEmpty': 'The table is empty.',
+                        'hasWater,!hasGarlic': 'The table seems to have been used recently for the preparation of food. On it you can see a clove of garlic.',
+                        '!hasWater,hasGarlic': 'The table seems to have been used recently for the preparation of food. On it you can see a bottle of water.',
+                        'hasWater,hasGarlic': 'The table is empty.'
                     }
                 }
             }
@@ -79,11 +82,12 @@ export const kitchen: Scene = {
                 },
                 take: {
                     message: 'Taken.',
-                    grantsFlags: ['hasWater']
+                    grantsFlags: ['hasWater'],
+                    score: 2
                 },
                 drink: {
                     message: 'The water is cool and refreshing.',
-                    grantsFlags: ['!hasWater'],
+                    removesFlags: ['hasWater'],
                     requiredFlags: ['hasWater']
                 }
             }
@@ -103,11 +107,12 @@ export const kitchen: Scene = {
                 },
                 take: {
                     message: 'Taken.',
-                    grantsFlags: ['hasGarlic']
+                    grantsFlags: ['hasGarlic'],
+                    score: 2
                 },
                 eat: {
                     message: 'The raw garlic is very strong! Your breath will smell for hours.',
-                    grantsFlags: ['!hasGarlic'],
+                    removesFlags: ['hasGarlic'],
                     requiredFlags: ['hasGarlic']
                 }
             }
@@ -130,7 +135,8 @@ export const kitchen: Scene = {
                 },
                 take: {
                     message: 'Taken.',
-                    grantsFlags: ['hasSack']
+                    grantsFlags: ['hasSack'],
+                    score: 2
                 }
             }
         }

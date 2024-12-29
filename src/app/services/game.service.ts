@@ -15,7 +15,9 @@ export class GameService {
         private uiService: UIService,
         private sceneService: SceneService,
         private gameState: GameStateService
-    ) {
+    ) {}
+
+    initializeGame() {
         // First validate all scenes
         const validationSummary = this.sceneValidator.validateAllScenes();
         if (validationSummary.errors > 0 || validationSummary.warnings > 0) {
