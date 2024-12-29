@@ -8,7 +8,7 @@ export const westOfHouse: Scene = {
     descriptions: {
         default: 'You are standing in an open field west of a white house, with a boarded front door. There is a small mailbox here.',
         states: {
-            'mailboxOpen': 'You are standing in an open field west of a white house, with a boarded front door. There is a small mailbox here, its door open.',
+            'mailboxOpen': 'You are standing in an open field west of a white house, with a boarded front door. There is a small mailbox here, its door open, revealing a leaflet inside.',
             'mailboxEmpty': 'You are standing in an open field west of a white house, with a boarded front door. There is a small mailbox here, its door open and empty.',
             'windowOpen': 'You are standing in an open field west of a white house. There is a small mailbox here. The window is open.'
         }
@@ -119,16 +119,15 @@ export const westOfHouse: Scene = {
             interactions: {
                 examine: {
                     message: 'Welcome to Zork!\n\nZork is a game of adventure, danger, and low cunning. In it you will explore some of the most amazing territory ever seen by mortals.',
-                    requiredFlags: ['mailboxOpen']
+                    requiredFlags: ['mailboxOpen', '!hasLeaflet']
                 },
                 read: {
-                    message: 'Welcome to Zork!\n\nZork is a game of adventure, danger, and low cunning. In it you will explore some of the most amazing territory ever seen by mortals.',
-                    requiredFlags: ['mailboxOpen']
+                    message: 'Welcome to Zork!\n\nZork is a game of adventure, danger, and low cunning. In it you will explore some of the most amazing territory ever seen by mortals.'
                 },
                 take: {
                     message: 'You take the leaflet from the mailbox.',
                     grantsFlags: ['hasLeaflet', 'mailboxEmpty'],
-                    requiredFlags: ['mailboxOpen'],
+                    requiredFlags: ['mailboxOpen', '!hasLeaflet'],
                     score: 5
                 }
             } as { [key: string]: SceneInteraction }

@@ -3,6 +3,7 @@ import { CommonModule, AsyncPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { GameService } from '../../services/game.service';
+import { CommandService } from '../../services/commands/command.service';
 
 @Component({
   selector: 'app-game',
@@ -18,6 +19,10 @@ import { GameService } from '../../services/game.service';
           <div class="sidebar-section">
             <h3>Known Commands:</h3>
             <div>{{ (sidebar$ | async)?.commands }}</div>
+          </div>
+          <div class="sidebar-section">
+            <h3>Available Exits:</h3>
+            <div class="exits-list">{{ (sidebar$ | async)?.exits }}</div>
           </div>
           <div class="sidebar-section">
             <h3>Known Objects:</h3>
@@ -63,7 +68,7 @@ import { GameService } from '../../services/game.service';
       border-radius: 5px;
       white-space: pre-wrap;
       color: #d4d4d4;
-      min-width: 0; /* Allows flex item to shrink below content size */
+      min-width: 0;
     }
     
     .game-sidebar {
@@ -71,7 +76,7 @@ import { GameService } from '../../services/game.service';
       display: flex;
       flex-direction: column;
       gap: 20px;
-      min-width: 0; /* Allows flex item to shrink below content size */
+      min-width: 0;
     }
 
     .sidebar-content {
@@ -95,6 +100,10 @@ import { GameService } from '../../services/game.service';
       margin-top: 0;
       color: #569cd6;
       font-family: monospace;
+    }
+
+    .exits-list {
+      white-space: pre-line;
     }
     
     .game-input {
@@ -135,9 +144,10 @@ export class GameComponent implements OnInit {
     objects: string;
     score: number;
     moves: number;
+    exits: string;
   }>;
 
-  constructor(private gameService: GameService) {
+  constructor(private gameService: GameService, private commandService: CommandService) {
     this.gameText$ = this.gameService.gameText$;
     this.sidebar$ = this.gameService.sidebar$;
   }

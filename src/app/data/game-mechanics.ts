@@ -1,7 +1,8 @@
 import { GameState, SceneInteraction } from '../models/game-state.model';
 
 export const verbSynonyms: { [key: string]: string[] } = {
-    'look': ['l', 'examine', 'x', 'search', 'inspect'],
+    'look': ['l', 'search'],
+    'examine': ['x', 'inspect'],
     'take': ['get', 'grab', 'pick'],
     'drop': ['put', 'place', 'set'],
     'inventory': ['i', 'inv'],
@@ -103,16 +104,26 @@ export function processCompoundAction(
 }
 
 export function processInteraction(interaction: SceneInteraction, gameState: GameState): string {
-    if (interaction.requiredFlags && !checkRequiredFlags(gameState, interaction.requiredFlags)) {
-        return interaction.failureMessage || 'You cannot do that.';
-    }
-
+    // Apply the effects of the interaction
     if (interaction.grantsFlags) {
         gameState.flags.push(...interaction.grantsFlags);
     }
 
+    if (interaction.removesFlags) {
+        gameState.flags = gameState.flags.filter(flag => !interaction.removesFlags?.includes(flag));
+    }
+
     if (interaction.score) {
         gameState.score += interaction.score;
+    }
+
+    // Get the appropriate message based on state
+    if (interaction.states) {
+        for (const [flag, message] of Object.entries(interaction.states)) {
+            if (gameState.flags.includes(flag)) {
+                return message;
+            }
+        }
     }
 
     return interaction.message;

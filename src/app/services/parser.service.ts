@@ -29,19 +29,23 @@ export class ParserService {
         const prepositions = ['in', 'on', 'at', 'with', 'to', 'from'];
         const prepIndex = words.findIndex((word, index) => index > 0 && prepositions.includes(word));
 
+        let object = '';
+        let preposition = '';
+        let target = '';
+
         if (prepIndex !== -1) {
-            return {
-                verb,
-                object: words.slice(1, prepIndex).join(' '),
-                preposition: words[prepIndex],
-                target: words.slice(prepIndex + 1).join(' '),
-                originalInput: input
-            };
+            object = this.normalizeObjectId(words.slice(1, prepIndex).join(' '));
+            preposition = words[prepIndex];
+            target = this.normalizeObjectId(words.slice(prepIndex + 1).join(' '));
+        } else {
+            object = this.normalizeObjectId(words.slice(1).join(' '));
         }
 
         return {
             verb,
-            object: words.slice(1).join(' '),
+            object,
+            preposition,
+            target,
             originalInput: input
         };
     }
@@ -60,5 +64,15 @@ export class ParserService {
         }
 
         return verb;
+    }
+
+    private normalizeObjectId(input: string): string {
+        // Convert to camelCase
+        return input.toLowerCase()
+            .replace(/[^a-zA-Z0-9 ]/g, '')
+            .split(' ')
+            .reduce((result, word, index) => 
+                result + (index === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1))
+            , '');
     }
 }

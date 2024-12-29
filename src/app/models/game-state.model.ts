@@ -51,17 +51,18 @@ export interface SceneExit {
 
 export interface SceneInteraction {
     message: string;
-    states?: { [key: string]: string };
+    failureMessage?: string;
     requiredFlags?: string[];
     grantsFlags?: string[];
+    removesFlags?: string[];
     revealsObjects?: string[];
-    grantsCommands?: string[];
-    failureMessage?: string;
+    states?: { [key: string]: string };
     score?: number;
     modifiesContainer?: {
         action: 'add' | 'remove';
         items: string[];
     };
+    grantsCommands?: string[];
 }
 
 export interface GameCommand {
