@@ -24,7 +24,9 @@ export class OpenCloseCommandService extends ContainerBaseCommandService {
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
         inventoryMechanics: InventoryMechanicsService,
-        private containerMechanics: ContainerMechanicsService
+        protected override containerMechanics: ContainerMechanicsService,
+        scoreMechanics: ScoreMechanicsService,
+        private gameText: GameTextService
     ) {
         super(
             gameState,
@@ -33,7 +35,9 @@ export class OpenCloseCommandService extends ContainerBaseCommandService {
             flagMechanics,
             progress,
             lightMechanics,
-            inventoryMechanics
+            inventoryMechanics,
+            containerMechanics,
+            scoreMechanics
         );
     }
 
@@ -43,23 +47,30 @@ export class OpenCloseCommandService extends ContainerBaseCommandService {
 
     async handle(command: GameCommand): Promise<CommandResponse> {
         if (!command.object) {
-            return this.noObjectError(command.verb);
+            return {
+                success: false,
+                message: this.gameText.get('error.noObject', { action: command.verb }),
+                incrementTurn: false
+            };
         }
 
         const object = await this.findObject(command.object);
         if (!object) {
-            return this.objectNotFoundError(command.object);
+            return {
+                success: false,
+                message: this.gameText.get('error.objectNotFound', { item: command.object }),
+                incrementTurn: false
+            };
         }
 
-        return this.handleInteraction(object, command);
-    }
+        const isOpenCommand = command.verb === 'open';
+        const action = isOpenCommand ? 'open' : 'close';
 
-    protected async handleInteraction(object: SceneObject, command: GameCommand): Promise<CommandResponse> {
-        // Check if we can see what we're trying to interact with
+        // Check light first
         if (!this.lightMechanics.isLightPresent()) {
             return {
                 success: false,
-                message: `It's too dark to see what you're trying to ${command.verb}.`,
+                message: this.gameText.get('error.tooDark', { action }),
                 incrementTurn: false
             };
         }
@@ -68,77 +79,62 @@ export class OpenCloseCommandService extends ContainerBaseCommandService {
         if (!await this.checkVisibility(object)) {
             return {
                 success: false,
-                message: `You don't see any ${command.object} here.`,
+                message: this.gameText.get('error.objectNotVisible', { item: object.name }),
                 incrementTurn: false
             };
         }
-
-        const isOpenCommand = command.verb === 'open';
-        const action = isOpenCommand ? 'open' : 'close';
 
         // Try state-based interaction first
         const stateResult = await this.stateMechanics.handleInteraction(object, action);
         if (stateResult.success) {
-            this.progress.incrementTurns();
             return { ...stateResult, incrementTurn: true };
         }
 
-        // Check if object has the specific interaction
+        // If not a container and no specific interaction, return error
         if (!object.isContainer && !object.interactions?.[action]) {
             return {
                 success: false,
-                message: `You can't ${action} the ${object.name}.`,
+                message: this.gameText.get('error.cantPerformAction', { action, item: object.name }),
                 incrementTurn: false
             };
         }
 
-        // If it's a container, use container mechanics
-        if (object.isContainer) {
-            const result = isOpenCommand ? 
-                await this.containerMechanics.openContainer(object) :
-                await this.containerMechanics.closeContainer(object);
-
-            if (result.success) {
-                this.progress.incrementTurns();
-            }
-            return { ...result, incrementTurn: result.success };
+        // Check container validity and state
+        const containerCheck = await this.checkContainer(object, action);
+        if (!containerCheck.success) {
+            return containerCheck;
         }
 
-        // Handle non-container interactions
-        const interaction = object.interactions?.[action];
-        if (!interaction) {
-            return {
-                success: false,
-                message: `You can't ${action} the ${object.name}.`,
-                incrementTurn: false
-            };
+        // Handle container action
+        const result = isOpenCommand ? 
+            await this.containerMechanics.openContainer(object) :
+            await this.containerMechanics.closeContainer(object);
+
+        if (result.success) {
+            // Handle scoring
+            await this.handleContainerInteraction(object, object, action);
+            
+            // Increment turns for successful action
+            this.progress.incrementTurns();
         }
 
-        // Check required flags
-        if (interaction.requiredFlags && 
-            !this.flagMechanics.checkFlags(interaction.requiredFlags)) {
-            return {
-                success: false,
-                message: interaction.failureMessage || `You can't ${action} the ${object.name} right now.`,
-                incrementTurn: false
-            };
+        return { ...result, incrementTurn: result.success };
+    }
+
+    getSuggestions(command: GameCommand): string[] {
+        if (!command.verb) {
+            return ['open', 'close'];
         }
 
-        // Handle flags
-        if (interaction.grantsFlags) {
-            interaction.grantsFlags.forEach(flag => this.flagMechanics.setFlag(flag));
-        }
-        if (interaction.removesFlags) {
-            interaction.removesFlags.forEach(flag => this.flagMechanics.removeFlag(flag));
+        if (command.verb === 'open' || command.verb === 'close') {
+            const scene = this.sceneService.getCurrentScene();
+            if (!scene?.objects) return [];
+
+            return Object.values(scene.objects)
+                .filter(obj => obj.isContainer || obj.interactions?.['open'] || obj.interactions?.['close'])
+                .map(obj => obj.name.toLowerCase());
         }
 
-        // Increment turns for successful action
-        this.progress.incrementTurns();
-
-        return {
-            success: true,
-            message: interaction.message,
-            incrementTurn: true
-        };
+        return [];
     }
 }

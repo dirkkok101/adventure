@@ -9,6 +9,7 @@ import { ProgressMechanicsService } from '../mechanics/progress-mechanics.servic
 import { LightMechanicsService } from '../mechanics/light-mechanics.service';
 import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
 import { ScoreMechanicsService } from '../mechanics/score-mechanics.service';
+import { GameTextService } from '../game-text.service';
 import { ExaminationBaseCommandService } from './bases/examination-base-command.service';
 
 @Injectable({
@@ -25,7 +26,8 @@ export class ExamineCommandService extends ExaminationBaseCommandService {
         lightMechanics: LightMechanicsService,
         inventoryMechanics: InventoryMechanicsService,
         containerMechanics: ContainerMechanicsService,
-        scoreMechanics: ScoreMechanicsService
+        scoreMechanics: ScoreMechanicsService,
+        gameText: GameTextService
     ) {
         super(
             gameState,
@@ -36,7 +38,8 @@ export class ExamineCommandService extends ExaminationBaseCommandService {
             lightMechanics,
             inventoryMechanics,
             containerMechanics,
-            scoreMechanics
+            scoreMechanics,
+            gameText
         );
     }
 

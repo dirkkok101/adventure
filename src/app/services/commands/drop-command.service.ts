@@ -146,13 +146,13 @@ export class DropCommandService extends BaseObjectCommandService {
         };
     }
 
-    getSuggestions(command: GameCommand): string[] {
+    async getSuggestions(command: GameCommand): Promise<string[]> {
         const suggestions: string[] = [];
         if (!command.object) {
             // Suggest items from inventory
             const inventoryItems = this.inventoryMechanics.listInventory();
             for (const itemId of inventoryItems) {
-                const item = this.sceneService.findObject(itemId);
+                const item = await this.sceneService.findObject(itemId);
                 if (item) {
                     suggestions.push(item.name);
                 }

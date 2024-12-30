@@ -205,9 +205,9 @@ export class InteractionCommandService extends BaseObjectCommandService {
         };
     }
 
-    getSuggestions(command: GameCommand): string[] {
-        const suggestions: string[] = [];
+    async getSuggestions(command: GameCommand): Promise<string[]> {
         const scene = this.sceneService.getCurrentScene();
+        const suggestions: string[] = [];
 
         if (!command.verb) {
             // Only suggest verbs this service actually handles
@@ -215,28 +215,35 @@ export class InteractionCommandService extends BaseObjectCommandService {
         }
 
         if (!command.object && scene?.objects) {
-            // Suggest visible objects that can be interacted with
-            Object.values(scene.objects)
+            // Get visible scene objects that can be interacted with
+            const sceneObjects = Object.values(scene.objects)
                 .filter(obj => 
                     this.lightMechanics.isObjectVisible(obj) && 
-                    (obj.usable || obj.interactions?.[command.verb]))
-                .forEach(obj => suggestions.push(obj.name));
+                    (obj.usable || obj.interactions?.[command.verb]));
+            
+            suggestions.push(...sceneObjects.map(obj => obj.name));
 
             // Add usable inventory items
-            const inventoryItems = this.inventoryMechanics.listInventory();
-            inventoryItems.forEach(itemId => {
-                const item = this.sceneService.findObject(itemId);
-                if (item && (item.usable || item.interactions?.[command.verb])) {
-                    suggestions.push(item.name);
-                }
-            });
+            const inventoryItems = await Promise.all(
+                this.inventoryMechanics.listInventory()
+                    .map(async id => {
+                        const item = await this.sceneService.findObject(id);
+                        if (item && (item.usable || item.interactions?.[command.verb])) {
+                            return item.name;
+                        }
+                        return null;
+                    })
+            );
+            suggestions.push(...inventoryItems.filter((name): name is string => name !== null));
         }
 
         if (command.preposition === 'with' && !command.indirect && scene?.objects) {
             // Suggest visible potential targets for the interaction
-            Object.values(scene.objects)
+            const targetObjects = Object.values(scene.objects)
                 .filter(obj => this.lightMechanics.isObjectVisible(obj))
-                .forEach(obj => suggestions.push(obj.name));
+                .map(obj => obj.name);
+            
+            suggestions.push(...targetObjects);
         }
 
         return suggestions;

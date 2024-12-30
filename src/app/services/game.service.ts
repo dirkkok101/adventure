@@ -5,6 +5,8 @@ import { CommandService } from './commands/command.service';
 import { SaveLoadService } from './save-load.service';
 import { GameTextService } from './game-text.service';
 import { ProgressMechanicsService } from './mechanics/progress-mechanics.service';
+import { GameInitializationService } from './game-initialization.service';
+import { GameState } from '../models/game-state.model';
 
 @Injectable({
     providedIn: 'root'
@@ -16,14 +18,25 @@ export class GameService {
         private commandService: CommandService,
         private saveLoad: SaveLoadService,
         private gameText: GameTextService,
-        private progress: ProgressMechanicsService
+        private progress: ProgressMechanicsService,
+        private gameInit: GameInitializationService
     ) {}
 
-    initializeGame() {
-        this.sceneService.initializeGame();
+    async initializeGame(): Promise<void> {
+        try {
+            await this.gameInit.initializeGame();
+        } catch (error) {
+            console.error('Error initializing game:', error);
+            this.gameText.addText('Error initializing game. Please refresh the page.');
+            throw error;
+        }
     }
 
-    async processInput(input: string): Promise<void> {
+    getCurrentState(): GameState {
+        return this.gameState.getCurrentState();
+    }
+
+    private async processCommand(input: string): Promise<void> {
         if (!input.trim()) {
             return;
         }
@@ -46,67 +59,81 @@ export class GameService {
         }
     }
 
+    async processInput(input: string): Promise<void> {
+        try {
+            await this.processCommand(input);
+        } catch (error) {
+            console.error('Error processing input:', error);
+            this.gameText.addText('An error occurred while processing your command.');
+        }
+    }
+
     getSuggestions(input: string): string[] {
-        return this.commandService.getSuggestions(input);
+        try {
+            return this.commandService.getSuggestions(input);
+        } catch (error) {
+            console.error('Error getting suggestions:', error);
+            return [];
+        }
     }
 
     async startNewGame(): Promise<void> {
-        const startScene = this.sceneService.getStartScene();
-        if (!startScene) {
-            throw new Error('No start scene defined');
+        try {
+            await this.gameInit.startNewGame();
+            await this.saveGame(); // Auto-save on new game
+        } catch (error) {
+            console.error('Error starting new game:', error);
+            this.gameText.addText('Error starting new game. Please try again.');
+            throw error;
         }
-
-        this.gameState.initializeState(startScene.id);
-        this.gameText.clearGameText();
-        this.gameText.addText(startScene.descriptions.default);
     }
 
     async loadGame(): Promise<boolean> {
-        const success = await this.saveLoad.loadGame();
-        if (success) {
-            const state = this.gameState.getCurrentState();
-            const scene = this.sceneService.getScene(state.currentScene);
-            if (scene) {
-                this.gameText.addText(scene.descriptions.default);
+        try {
+            const success = await this.saveLoad.loadGame();
+            if (success) {
+                const state = this.gameState.getCurrentState();
+                const scene = this.sceneService.getScene(state.currentScene);
+                if (scene) {
+                    this.gameText.addText(scene.descriptions.default);
+                }
             }
+            return success;
+        } catch (error) {
+            console.error('Error loading game:', error);
+            this.gameText.addText('Error loading game. The save file might be corrupted.');
+            return false;
         }
-        return success;
     }
 
-    async saveGame(): Promise<void> {
-        await this.saveLoad.saveGame();
+    async saveGame(): Promise<boolean> {
+        try {
+            await this.saveLoad.saveGame();
+            return true;
+        } catch (error) {
+            console.error('Error saving game:', error);
+            this.gameText.addText('Error saving game. Please try again.');
+            return false;
+        }
     }
 
     async hasSavedGame(): Promise<boolean> {
-        return await this.saveLoad.hasSavedGame();
+        try {
+            return await this.saveLoad.hasSavedGame();
+        } catch (error) {
+            console.error('Error checking saved game:', error);
+            return false;
+        }
     }
 
-    async processCommand(input: string): Promise<void> {
-        if (!input.trim()) {
-            return;
-        }
-
+    async resetGame(): Promise<void> {
         try {
-            const state = this.gameState.getCurrentState();
-            if (state.gameOver) {
-                this.gameText.addText('The game is over. Start a new game or load a saved game.');
-                return;
-            }
-
-            this.progress.incrementMoves();
-            const result = await this.commandService.processInput(input);
-            
-            if (result.message) {
-                this.gameText.addText(result.message);
-            }
-
-            // Handle turn increment
-            if (result.success && result.incrementTurn) {
-                this.progress.incrementTurns();
-            }
+            this.saveLoad.clearSavedGame();
+            await this.gameInit.resetGame();
         } catch (error) {
-            console.error('Error processing command:', error);
-            this.gameText.addText('Something went wrong processing that command.');
+            console.error('Error resetting game:', error);
+            this.gameText.addText('Error resetting game. Please refresh the page.');
+            throw error;
         }
     }
 

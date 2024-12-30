@@ -25,7 +25,7 @@ export abstract class BaseCommandService implements ICommandService {
 
     abstract canHandle(command: GameCommand): boolean;
     abstract handle(command: GameCommand): Promise<CommandResponse>;
-    abstract getSuggestions?(command: GameCommand): string[];
+    abstract getSuggestions?(command: GameCommand): Promise<string[]> | string[];
 
     protected async handleScoring({ action, object, container, skipGeneralScore = false }: ScoringOptions): Promise<void> {
         await this.scoreMechanics.handleObjectScoring(

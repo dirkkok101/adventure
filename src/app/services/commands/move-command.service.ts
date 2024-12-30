@@ -22,7 +22,9 @@ export class MoveCommandService extends MovementBaseCommandService {
         flagMechanics: FlagMechanicsService,
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
-        inventoryMechanics: InventoryMechanicsService
+        inventoryMechanics: InventoryMechanicsService,
+        scoreMechanics: ScoreMechanicsService,
+        private gameTextService: GameTextService
     ) {
         super(
             gameState,
@@ -31,7 +33,8 @@ export class MoveCommandService extends MovementBaseCommandService {
             flagMechanics,
             progress,
             lightMechanics,
-            inventoryMechanics
+            inventoryMechanics,
+            scoreMechanics
         );
     }
 
@@ -48,11 +51,15 @@ export class MoveCommandService extends MovementBaseCommandService {
             };
         }
 
-        const object = await this.findObject(command.object);
+        return this.handleObjectMovement(command.object);
+    }
+
+    protected override async handleObjectMovement(objectName: string): Promise<CommandResponse> {
+        const object = await this.findObject(objectName);
         if (!object) {
             return {
                 success: false,
-                message: `I don't see any ${command.object} here.`,
+                message: `I don't see any ${objectName} here.`,
                 incrementTurn: false
             };
         }
@@ -87,5 +94,26 @@ export class MoveCommandService extends MovementBaseCommandService {
             message: `You move the ${object.name}.`,
             incrementTurn: true
         };
+    }
+
+    getSuggestions(command: GameCommand): string[] {
+        if (!command.verb) {
+            return ['move'];
+        }
+
+        if (command.verb === 'move' && !command.object) {
+            const scene = this.sceneService.getCurrentScene();
+            if (!scene?.objects || !this.checkLightInScene()) {
+                return [];
+            }
+
+            return Object.values(scene.objects)
+                .filter(obj => 
+                    this.lightMechanics.isObjectVisible(obj) &&
+                    obj.interactions?.['enter'])
+                .map(obj => obj.name.toLowerCase());
+        }
+
+        return [];
     }
 }

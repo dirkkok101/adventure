@@ -10,6 +10,7 @@ import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
 import { InventoryMechanicsService } from '../../mechanics/inventory-mechanics.service';
 import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
 import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
+import { GameTextService } from '../../game-text.service';
 import { ErrorResponse, SuccessResponse } from './command-types';
 
 @Injectable()
@@ -22,8 +23,9 @@ export abstract class ExaminationBaseCommandService extends BaseCommandService {
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
         inventoryMechanics: InventoryMechanicsService,
-        private containerMechanics: ContainerMechanicsService,
-        scoreMechanics: ScoreMechanicsService
+        protected containerMechanics: ContainerMechanicsService,
+        scoreMechanics: ScoreMechanicsService,
+        private gameText: GameTextService
     ) {
         super(
             gameState,
@@ -38,11 +40,36 @@ export abstract class ExaminationBaseCommandService extends BaseCommandService {
     }
 
     protected async getObjectDescription(object: SceneObject, detailed: boolean = false): Promise<string> {
-        // Get base description
-        let description = await this.stateMechanics.getStateBasedDescription(
-            { states: object.descriptions.states }, 
-            detailed ? object.descriptions.examine || object.descriptions.default : object.descriptions.default
-        );
+        // Try state-based interaction first
+        const action = detailed ? 'examine' : 'look';
+        const stateResult = await this.stateMechanics.handleInteraction(object, action);
+        if (stateResult.success) {
+            return stateResult.message;
+        }
+
+        // Get base description based on examination type
+        let description = detailed && object.descriptions.examine ? 
+            object.descriptions.examine : 
+            object.descriptions.default;
+
+        // Check for state-based descriptions
+        if (object.descriptions.states) {
+            const state = this.gameState.getCurrentState();
+            for (const [flagCombo, desc] of Object.entries(object.descriptions.states)) {
+                const flags = flagCombo.split(',');
+                const matches = flags.every(flag => {
+                    if (flag.startsWith('!')) {
+                        return !state.flags[flag.substring(1)];
+                    }
+                    return state.flags[flag];
+                });
+
+                if (matches) {
+                    description = desc;
+                    break;
+                }
+            }
+        }
 
         // Add container contents if applicable
         if (object.isContainer) {
@@ -58,14 +85,14 @@ export abstract class ExaminationBaseCommandService extends BaseCommandService {
 
     protected async getContainerContents(container: SceneObject): Promise<string> {
         if (!this.containerMechanics.isOpen(container.id)) {
-            return '\nIt is closed.';
+            return `\n${this.gameText.get('container.closed')}`;
         }
 
         const contents = await this.containerMechanics.getContainerContents(container.id);
         if (contents.length === 0) {
-            return container.descriptions.empty 
-                ? `\n${container.descriptions.empty}` 
-                : '\nIt is empty.';
+            return container.descriptions.empty ? 
+                `\n${container.descriptions.empty}` : 
+                `\n${this.gameText.get('container.empty')}`;
         }
 
         const contentsList = await Promise.all(
@@ -77,12 +104,12 @@ export abstract class ExaminationBaseCommandService extends BaseCommandService {
 
         const validContents = contentsList.filter(Boolean);
         if (validContents.length === 0) {
-            return '\nIt is empty.';
+            return `\n${this.gameText.get('container.empty')}`;
         }
 
-        return container.descriptions.contents 
-            ? `\n${container.descriptions.contents}\n${validContents.join(', ')}` 
-            : `\nIt contains: ${validContents.join(', ')}`;
+        return container.descriptions.contents ? 
+            `\n${container.descriptions.contents}\n${validContents.join(', ')}` : 
+            `\n${this.gameText.get('container.contents', { items: validContents.join(', ') })}`;
     }
 
     protected async handleExaminationScoring(object: SceneObject, detailed: boolean): Promise<void> {
@@ -94,41 +121,49 @@ export abstract class ExaminationBaseCommandService extends BaseCommandService {
     }
 
     protected async getExaminableSuggestions(): Promise<string[]> {
-        const scene = await this.sceneService.getCurrentScene();
-        if (!scene?.objects || !this.checkLightInScene()) {
+        const scene = this.sceneService.getCurrentScene();
+        if (!scene?.objects || !this.lightMechanics.isLightPresent()) {
             return [];
         }
 
-        // Get all visible objects in the scene
-        const sceneObjects = Object.values(scene.objects)
-            .filter(obj => this.lightMechanics.isObjectVisible(obj))
-            .map(obj => obj.name);
+        // Get visible scene objects
+        const visibleObjects = this.sceneService.getVisibleObjects(scene);
 
-        // Add inventory items
-        const inventoryItems = this.inventoryMechanics.listInventory()
-            .map(async (id) => {
-                const item = await this.sceneService.findObject(id);
-                return item ? item.name : '';
-            });
+        // Get inventory objects
+        const inventoryItems = await Promise.all(
+            this.inventoryMechanics.listInventory()
+                .map(id => this.findObject(id))
+        );
 
-        const resolvedItems = await Promise.all(inventoryItems);
-        return [...new Set([...sceneObjects, ...resolvedItems])];
+        // Combine and filter objects that can be examined
+        return [...visibleObjects, ...inventoryItems.filter((obj): obj is SceneObject => obj !== null)]
+            .filter(obj => obj.descriptions?.examine || obj.interactions?.['examine'])
+            .map(obj => obj.name.toLowerCase());
     }
 
-    protected async handleLookAround(): Promise<CommandResponse> {
-        const scene = await this.sceneService.getCurrentScene();
-        if (!scene) {
-            return this.noSceneError();
+    protected async handleExamination(object: SceneObject, detailed: boolean = false): Promise<CommandResponse> {
+        // Check light first
+        if (!this.lightMechanics.isLightPresent()) {
+            return {
+                success: false,
+                message: this.gameText.get('error.tooDark', { action: detailed ? 'examine' : 'look' }),
+                incrementTurn: false
+            };
         }
 
-        if (!this.checkLightInScene()) {
-            return this.tooDarkError();
+        // Check if object is visible
+        if (!await this.checkVisibility(object)) {
+            return {
+                success: false,
+                message: this.gameText.get('error.objectNotVisible', { item: object.name }),
+                incrementTurn: false
+            };
         }
 
-        const sceneDescription = await this.sceneService.getSceneDescription(scene);
+        const description = await this.getObjectDescription(object, detailed);
         return {
             success: true,
-            message: sceneDescription,
+            message: description,
             incrementTurn: true
         };
     }

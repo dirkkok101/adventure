@@ -64,13 +64,9 @@ export class InventoryCommandService extends BaseObjectCommandService {
         // Build inventory list with descriptions
         const itemDescriptions = await Promise.all(items.map(async item => {
             // Check if item has a special state description
-            const defaultDesc = item.descriptions?.['default'] || '';
-            const stateDesc = await this.stateMechanics.getStateBasedDescription(
-                { states: item.descriptions?.states },
-                defaultDesc
-            );
-            if (stateDesc && stateDesc !== defaultDesc) {
-                return `- ${item.name}: ${stateDesc}`;
+            const stateResult = await this.stateMechanics.handleInteraction(item, 'examine');
+            if (stateResult.success) {
+                return `- ${item.name}: ${stateResult.message}`;
             }
 
             // Check if item is a container and has contents
@@ -81,7 +77,7 @@ export class InventoryCommandService extends BaseObjectCommandService {
                 return `- ${item.name} (containing: ${contentNames})`;
             }
 
-            // Default description
+            // Default case - just show the item name
             return `- ${item.name}`;
         }));
 
