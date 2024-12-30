@@ -6,6 +6,13 @@ import { GameStateLoggerService } from './logging/game-state-logger.service';
 
 const STORAGE_KEY = 'zork_game_state';
 
+interface SaveState {
+    gameState: Omit<GameState, 'knownObjects'> & {
+        knownObjects: string[];
+    };
+    gameText: string[];
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -17,23 +24,49 @@ export class SaveLoadService {
     ) {}
 
     saveGame() {
-        const state = this.gameState.getCurrentState();
-        const saveState = {
-            gameState: {
-                ...state,
-                knownObjects: Array.from(state.knownObjects)
-            },
-            gameText: this.gameText.getGameText()
-        };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(saveState));
-        this.logger.logState('Game saved', state);
+        try {
+            const state = this.gameState.getCurrentState();
+            // Create a clean copy of the state without any RxJS observables
+            const cleanState: GameState = {
+                currentScene: state.currentScene,
+                inventory: { ...state.inventory },
+                containers: { ...state.containers },
+                flags: { ...state.flags },
+                score: state.score,
+                maxScore: state.maxScore,
+                moves: state.moves,
+                turns: state.turns,
+                knownObjects: new Set<string>(state.knownObjects),
+                gameOver: state.gameOver,
+                gameWon: state.gameWon,
+                light: state.light,
+                trophies: [...state.trophies]
+            };
+
+            // Get just the text array from the service, not the Observable
+            const gameText = this.gameText.getGameText();
+
+            const saveState: SaveState = {
+                gameState: {
+                    ...cleanState,
+                    knownObjects: Array.from(cleanState.knownObjects)
+                } as SaveState['gameState'],
+                gameText: gameText
+            };
+            
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(saveState));
+            this.logger.logState('Game saved', cleanState);
+        } catch (error) {
+            console.error('Error saving game state:', error);
+            throw error;
+        }
     }
 
     loadGame(): boolean {
         const savedState = localStorage.getItem(STORAGE_KEY);
         if (savedState) {
             try {
-                const parsedState = JSON.parse(savedState);
+                const parsedState = JSON.parse(savedState) as SaveState;
                 
                 // Load game state
                 this.gameState.updateState(() => ({
@@ -60,8 +93,7 @@ export class SaveLoadService {
         return localStorage.getItem(STORAGE_KEY) !== null;
     }
 
-    clearSavedGame() {
+    clearSavedGame(): void {
         localStorage.removeItem(STORAGE_KEY);
-        this.logger.logState('Game cleared', this.gameState.getCurrentState());
     }
 }

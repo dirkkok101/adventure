@@ -93,10 +93,4 @@ export class InventoryCommandService extends BaseObjectCommandService {
         };
     }
 
-    getSuggestions(command: GameCommand): string[] {
-        if (!command.verb || command.verb === 'i' || command.verb.startsWith('inv')) {
-            return ['inventory'];
-        }
-        return [];
-    }
 }

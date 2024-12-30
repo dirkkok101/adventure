@@ -75,7 +75,14 @@ export class GameTextService {
     /**
      * Get game output history
      */
-    getGameText() {
+    getGameText(): string[] {
+        return [...this.gameText];
+    }
+
+    /**
+     * Get game output history as an observable
+     */
+    getGameText$() {
         return this.gameText$;
     }
 

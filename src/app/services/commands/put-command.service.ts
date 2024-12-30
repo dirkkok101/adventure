@@ -36,8 +36,9 @@ export class PutCommandService extends ContainerBaseCommandService {
             progress,
             lightMechanics,
             inventoryMechanics,
-            containerMechanics,
-            scoreMechanics
+            scoreMechanics,
+            containerMechanics
+    
         );
     }
 
@@ -105,29 +106,37 @@ export class PutCommandService extends ContainerBaseCommandService {
         };
     }
 
-    async getSuggestions(command: GameCommand): Promise<string[]> {
-        if (!command.verb || command.verb === 'p' || command.verb.startsWith('put')) {
-            return ['put'];
+    override async getSuggestions(command: GameCommand): Promise<string[]> {
+        // Only suggest if we have a verb
+        if (!command.verb) {
+            return [];
         }
 
-        if (command.verb === 'put' && !command.object) {
-            const inventoryItems = await Promise.all(
-                this.inventoryMechanics.listInventory()
-                    .map(async id => {
-                        const item = await this.sceneService.findObject(id);
-                        return item?.name.toLowerCase() || '';
-                    })
-            );
-            return inventoryItems.filter(Boolean);
+        const scene = this.sceneService.getCurrentScene();
+        if (!scene?.objects) return [];
+
+        const suggestions = new Set<string>();
+        const state = this.gameState.getCurrentState();
+
+        // If we don't have an object yet, suggest inventory items
+        if (!command.object) {
+            for (const id of Object.keys(state.inventory)) {
+                const obj = scene.objects[id];
+                if (obj) {
+                    suggestions.add(obj.name.toLowerCase());
+                }
+            }
+            return Array.from(suggestions);
         }
 
-        if (command.verb === 'put' && command.object && !command.target) {
-            const scene = this.sceneService.getCurrentScene();
-            if (!scene?.objects) return [];
-
-            return Object.values(scene.objects)
-                .filter(obj => obj.isContainer)
-                .map(obj => obj.name.toLowerCase());
+        // If we have an object but no target, suggest containers
+        if (!command.target) {
+            for (const obj of Object.values(scene.objects)) {
+                if (obj.isContainer && this.lightMechanics.isObjectVisible(obj)) {
+                    suggestions.add(obj.name.toLowerCase());
+                }
+            }
+            return Array.from(suggestions);
         }
 
         return [];

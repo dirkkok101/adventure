@@ -146,7 +146,7 @@ export class DropCommandService extends BaseObjectCommandService {
         };
     }
 
-    async getSuggestions(command: GameCommand): Promise<string[]> {
+    override async getSuggestions(command: GameCommand): Promise<string[]> {
         const suggestions: string[] = [];
         if (!command.object) {
             // Suggest items from inventory

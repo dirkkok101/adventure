@@ -26,14 +26,6 @@ export class SceneService {
     ) {}
 
     /**
-     * Load scenes into the service
-     * @param scenes Scene dictionary to load
-     */
-    loadScenes(scenes: { [key: string]: Scene }): void {
-        this.scenes = scenes;
-    }
-
-    /**
      * Get the start scene of the game
      */
     getStartScene(): Scene | null {

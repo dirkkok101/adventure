@@ -100,8 +100,4 @@ export class LookCommandService extends ExaminationBaseCommandService {
         };
     }
 
-    getSuggestions(command: GameCommand): string[] {
-        // Just return 'look' as it's the basic command
-        return ['look'];
-    }
 }

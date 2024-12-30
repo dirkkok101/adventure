@@ -23,7 +23,7 @@ export abstract class ExaminationBaseCommandService extends BaseCommandService {
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
         inventoryMechanics: InventoryMechanicsService,
-        protected containerMechanics: ContainerMechanicsService,
+        containerMechanics: ContainerMechanicsService,
         scoreMechanics: ScoreMechanicsService,
         private gameText: GameTextService
     ) {
@@ -35,7 +35,8 @@ export abstract class ExaminationBaseCommandService extends BaseCommandService {
             progress,
             lightMechanics,
             inventoryMechanics,
-            scoreMechanics
+            scoreMechanics,
+            containerMechanics
         );
     }
 
@@ -166,5 +167,39 @@ export abstract class ExaminationBaseCommandService extends BaseCommandService {
             message: description,
             incrementTurn: true
         };
+    }
+
+    override async getSuggestions(command: GameCommand): Promise<string[]> {
+        // Only suggest objects if we have a verb
+        if (!command.verb) {
+            return [];
+        }
+
+        const scene = this.sceneService.getCurrentScene();
+        if (!scene?.objects) return [];
+
+        const suggestions = new Set<string>();
+        const state = this.gameState.getCurrentState();
+
+        // Add visible objects and inventory items
+        for (const obj of Object.values(scene.objects)) {
+            // Skip if not visible and not in inventory
+            if (!this.lightMechanics.isObjectVisible(obj) && !state.inventory[obj.id]) {
+                continue;
+            }
+
+            // Skip if in a closed container
+            const container = this.containerMechanics.findContainerWithItem(obj.id);
+            if (container && !this.containerMechanics.isOpen(container.id)) {
+                continue;
+            }
+
+            // Add if it has an examine interaction or description
+            if (obj.interactions?.['examine'] || obj.descriptions?.examine) {
+                suggestions.add(obj.name.toLowerCase());
+            }
+        }
+
+        return Array.from(suggestions);
     }
 }

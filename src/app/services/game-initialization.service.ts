@@ -19,9 +19,6 @@ export class GameInitializationService {
      * @returns Promise that resolves when initialization is complete
      */
     async initializeGame(): Promise<void> {
-        // Load all game scenes
-        await this.loadGameScenes();
-
         // Set up initial game state
         await this.initializeGameState();
     }
@@ -50,32 +47,6 @@ export class GameInitializationService {
     async resetGame(): Promise<void> {
         await this.initializeGame();
         await this.startNewGame();
-    }
-
-    private async loadGameScenes(): Promise<void> {
-        // TODO: Load scenes from JSON or API
-        const scenes: { [key: string]: Scene } = {
-            start: {
-                id: 'start',
-                name: 'Starting Room',
-                region: 'House',
-                descriptions: {
-                    default: 'You are in a dimly lit room. A door leads north.',
-                    dark: 'It is pitch dark. You are likely to be eaten by a grue.'
-                },
-                light: false,
-                exits: [
-                    {
-                        direction: 'north',
-                        targetScene: 'room2',
-                        description: 'A wooden door leads north.'
-                    }
-                ]
-            }
-            // Add more scenes here
-        };
-
-        this.sceneService.loadScenes(scenes);
     }
 
     private async initializeGameState(): Promise<void> {

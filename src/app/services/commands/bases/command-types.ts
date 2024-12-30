@@ -3,7 +3,7 @@ import { CommandResponse, SceneObject, GameCommand } from '../../../models/game-
 export interface ICommandService {
     canHandle(command: GameCommand): boolean;
     handle(command: GameCommand): Promise<CommandResponse>;
-    getSuggestions?(command: GameCommand): Promise<string[]> | string[];
+    getSuggestions(command: GameCommand): Promise<string[]>;
 }
 
 export interface ScoringOptions {

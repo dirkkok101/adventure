@@ -24,8 +24,8 @@ export class TakeCommandService extends ContainerBaseCommandService {
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
         inventoryMechanics: InventoryMechanicsService,
-        protected override containerMechanics: ContainerMechanicsService,
         scoreMechanics: ScoreMechanicsService,
+        protected override containerMechanics: ContainerMechanicsService,
         private gameText: GameTextService
     ) {
         super(
@@ -36,8 +36,8 @@ export class TakeCommandService extends ContainerBaseCommandService {
             progress,
             lightMechanics,
             inventoryMechanics,
-            containerMechanics,
-            scoreMechanics
+            scoreMechanics,
+            containerMechanics
         );
     }
 
@@ -133,20 +133,21 @@ export class TakeCommandService extends ContainerBaseCommandService {
         return { ...result, incrementTurn: result.success };
     }
 
-    getSuggestions(command: GameCommand): string[] {
-        if (!command.verb) {
-            return ['take', 'get', 'pick'];
-        }
+    override async getSuggestions(command: GameCommand): Promise<string[]> {
+        const suggestions = await super.getSuggestions(command);
 
-        if (['take', 'get', 'pick'].includes(command.verb)) {
+        // Only suggest objects that can be taken
+        if (!command.object) {
             const scene = this.sceneService.getCurrentScene();
-            if (!scene?.objects) return [];
+            if (!scene?.objects) return suggestions;
 
-            return Object.values(scene.objects)
-                .filter(obj => this.inventoryMechanics.canTakeObject(obj) || obj.interactions?.['take'])
-                .map(obj => obj.name.toLowerCase());
+            const sceneObjects = scene.objects;  // Create a stable reference that TypeScript can track
+            return suggestions.filter(name => {
+                const obj = Object.values(sceneObjects).find(o => o.name.toLowerCase() === name);
+                return obj?.canTake;
+            });
         }
 
-        return [];
+        return suggestions;
     }
 }

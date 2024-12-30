@@ -138,6 +138,6 @@ export class GameService {
     }
 
     getGameText() {
-        return this.gameText.getGameText();
+        return this.gameText.getGameText$();
     }
 }

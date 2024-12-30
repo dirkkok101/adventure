@@ -22,8 +22,8 @@ export abstract class ContainerBaseCommandService extends BaseCommandService {
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
         inventoryMechanics: InventoryMechanicsService,
-        protected containerMechanics: ContainerMechanicsService,
-        scoreMechanics: ScoreMechanicsService
+        scoreMechanics: ScoreMechanicsService,
+        protected override containerMechanics: ContainerMechanicsService
     ) {
         super(
             gameState,
@@ -33,7 +33,8 @@ export abstract class ContainerBaseCommandService extends BaseCommandService {
             progress,
             lightMechanics,
             inventoryMechanics,
-            scoreMechanics
+            scoreMechanics,
+            containerMechanics
         );
     }
 
@@ -112,5 +113,26 @@ export abstract class ContainerBaseCommandService extends BaseCommandService {
                 (!obj.isLocked || command.verb === 'unlock')
             )
             .map(obj => obj.name);
+    }
+
+    override async getSuggestions(command: GameCommand): Promise<string[]> {
+        // Only suggest objects if we have a verb
+        if (!command.verb) {
+            return [];
+        }
+
+        const scene = this.sceneService.getCurrentScene();
+        if (!scene?.objects) return [];
+
+        const suggestions = new Set<string>();
+
+        // Add visible containers
+        for (const obj of Object.values(scene.objects)) {
+            if (obj.isContainer && this.lightMechanics.isObjectVisible(obj)) {
+                suggestions.add(obj.name.toLowerCase());
+            }
+        }
+
+        return Array.from(suggestions);
     }
 }

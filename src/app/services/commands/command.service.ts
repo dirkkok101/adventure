@@ -16,7 +16,7 @@ import { ProgressMechanicsService } from '../mechanics/progress-mechanics.servic
 interface CommandHandler {
     canHandle(command: GameCommand): boolean;
     handle(command: GameCommand): Promise<{ success: boolean; message: string; incrementTurn: boolean }>;
-    getSuggestions?(command: GameCommand): string[];
+    getSuggestions?(command: GameCommand): Promise<string[]> | string[];
 }
 
 const DIRECTION_ALIASES: { [key: string]: string } = {
@@ -69,8 +69,13 @@ export class CommandService {
         this.commandHandlers = [
             movementCommand,
             inventoryCommand,
+            dropCommand,
             lookCommand,
+            examineCommand,
             openCloseCommand,
+            takeCommand,
+            putCommand,
+            readCommand,
             turnCommand
         ].filter(handler => 
             typeof handler.canHandle === 'function' && 
@@ -172,13 +177,15 @@ export class CommandService {
     }
 
     getSuggestions(input: string): string[] {
-        const suggestions: string[] = [];
         const command = this.parseCommand(input.toLowerCase());
-        
-        if (!command) return suggestions;
+        if (!command) {
+            return [];
+        }
 
-        // Add common verb suggestions
-        if (input.length <= 2) {
+        const suggestions: string[] = [];
+
+        // Add basic verb suggestions if no verb or very short input
+        if (!command.object && (!command.verb || input.length <= 2)) {
             suggestions.push(...Object.keys(VERB_ALIASES));
             suggestions.push(...DIRECTIONS);
         }
@@ -186,12 +193,18 @@ export class CommandService {
         // Add context-specific suggestions from handlers
         for (const handler of this.commandHandlers) {
             if (handler.getSuggestions) {
-                suggestions.push(...handler.getSuggestions(command));
+                const handlerSuggestions = handler.getSuggestions(command);
+                if (handlerSuggestions instanceof Promise) {
+                    // Skip async suggestions in the synchronous method
+                    continue;
+                }
+                suggestions.push(...handlerSuggestions);
             }
         }
 
-        return [...new Set(suggestions)].filter(s => 
-            s.toLowerCase().startsWith(input.toLowerCase())
-        ).sort();
+        // Filter suggestions to match input
+        return [...new Set(suggestions)]
+            .filter(s => s.toLowerCase().startsWith(input.toLowerCase()))
+            .sort();
     }
 }

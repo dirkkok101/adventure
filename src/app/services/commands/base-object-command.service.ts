@@ -112,4 +112,18 @@ export abstract class BaseObjectCommandService {
             incrementTurn: false 
         };
     }
+
+    async getSuggestions(command: GameCommand): Promise<string[]> {
+        // Only suggest objects if we have a verb
+        if (!command.verb) {
+            return [];
+        }
+
+        // Only suggest objects if we don't have one yet
+        if (command.object) {
+            return [];
+        }
+
+        return [];
+    }
 }

@@ -83,8 +83,4 @@ export class ExamineCommandService extends ExaminationBaseCommandService {
         };
     }
 
-    getSuggestions(command: GameCommand): string[] {
-        // Return an empty array since we can't get the examinable objects synchronously
-        return [];
-    }
 }

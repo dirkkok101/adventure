@@ -205,7 +205,7 @@ export class InteractionCommandService extends BaseObjectCommandService {
         };
     }
 
-    async getSuggestions(command: GameCommand): Promise<string[]> {
+    override async getSuggestions(command: GameCommand): Promise<string[]> {
         const scene = this.sceneService.getCurrentScene();
         const suggestions: string[] = [];
 

@@ -9,6 +9,7 @@ import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.ser
 import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
 import { InventoryMechanicsService } from '../../mechanics/inventory-mechanics.service';
 import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
+import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
 import { ErrorResponse, SuccessResponse } from './command-types';
 
 @Injectable()
@@ -35,7 +36,8 @@ export abstract class MovementBaseCommandService extends BaseCommandService {
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
         inventoryMechanics: InventoryMechanicsService,
-        scoreMechanics: ScoreMechanicsService
+        scoreMechanics: ScoreMechanicsService,
+        containerMechanics: ContainerMechanicsService
     ) {
         super(
             gameState,
@@ -45,7 +47,8 @@ export abstract class MovementBaseCommandService extends BaseCommandService {
             progress,
             lightMechanics,
             inventoryMechanics,
-            scoreMechanics
+            scoreMechanics,
+            containerMechanics
         );
     }
 
@@ -188,5 +191,20 @@ export abstract class MovementBaseCommandService extends BaseCommandService {
         return scene.exits
             .filter(exit => !exit.requiredFlags || this.flagMechanics.checkFlags(exit.requiredFlags))
             .map(exit => exit.direction);
+    }
+
+    override async getSuggestions(command: GameCommand): Promise<string[]> {
+        // Only suggest directions if we have a verb that needs them
+        if (!command.verb) {
+            return [];
+        }
+
+        // For 'go' or 'move' commands, suggest directions if no object yet
+        if ((command.verb === 'go' || command.verb === 'move') && !command.object) {
+            return ['north', 'south', 'east', 'west', 'up', 'down'];
+        }
+
+        // For directional commands, no suggestions needed
+        return [];
     }
 }

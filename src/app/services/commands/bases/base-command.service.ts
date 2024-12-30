@@ -8,6 +8,7 @@ import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.ser
 import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
 import { InventoryMechanicsService } from '../../mechanics/inventory-mechanics.service';
 import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
+import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
 import { ICommandService, ScoringOptions, ErrorResponse, SuccessResponse } from './command-types';
 
 @Injectable()
@@ -20,12 +21,48 @@ export abstract class BaseCommandService implements ICommandService {
         protected progress: ProgressMechanicsService,
         protected lightMechanics: LightMechanicsService,
         protected inventoryMechanics: InventoryMechanicsService,
-        protected scoreMechanics: ScoreMechanicsService
+        protected scoreMechanics: ScoreMechanicsService,
+        protected containerMechanics: ContainerMechanicsService
     ) {}
 
     abstract canHandle(command: GameCommand): boolean;
     abstract handle(command: GameCommand): Promise<CommandResponse>;
-    abstract getSuggestions?(command: GameCommand): Promise<string[]> | string[];
+
+    /**
+     * Get suggestions for command completion
+     * @param command The current command being typed
+     * @returns Array of suggestions
+     */
+    async getSuggestions(command: GameCommand): Promise<string[]> {
+        // Only suggest objects if we have a verb
+        if (!command.verb) {
+            return [];
+        }
+
+        const scene = this.sceneService.getCurrentScene();
+        if (!scene?.objects) return [];
+
+        const suggestions = new Set<string>();
+        const state = this.gameState.getCurrentState();
+
+        // Add visible objects from scene that aren't in closed containers
+        for (const obj of Object.values(scene.objects)) {
+            // Skip if not visible and not in inventory
+            if (!this.lightMechanics.isObjectVisible(obj) && !state.inventory[obj.id]) {
+                continue;
+            }
+
+            // Skip if in a closed container
+            const container = this.containerMechanics.findContainerWithItem(obj.id);
+            if (container && !this.containerMechanics.isOpen(container.id)) {
+                continue;
+            }
+
+            suggestions.add(obj.name.toLowerCase());
+        }
+
+        return Array.from(suggestions);
+    }
 
     protected async handleScoring({ action, object, container, skipGeneralScore = false }: ScoringOptions): Promise<void> {
         await this.scoreMechanics.handleObjectScoring(

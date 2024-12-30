@@ -24,8 +24,8 @@ export class OpenCloseCommandService extends ContainerBaseCommandService {
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
         inventoryMechanics: InventoryMechanicsService,
-        protected override containerMechanics: ContainerMechanicsService,
         scoreMechanics: ScoreMechanicsService,
+        protected override containerMechanics: ContainerMechanicsService,
         private gameText: GameTextService
     ) {
         super(
@@ -36,8 +36,8 @@ export class OpenCloseCommandService extends ContainerBaseCommandService {
             progress,
             lightMechanics,
             inventoryMechanics,
-            containerMechanics,
-            scoreMechanics
+            scoreMechanics,
+            containerMechanics
         );
     }
 
@@ -121,20 +121,24 @@ export class OpenCloseCommandService extends ContainerBaseCommandService {
         return { ...result, incrementTurn: result.success };
     }
 
-    getSuggestions(command: GameCommand): string[] {
-        if (!command.verb) {
-            return ['open', 'close'];
-        }
+    override async getSuggestions(command: GameCommand): Promise<string[]> {
+        const suggestions = await super.getSuggestions(command);
 
-        if (command.verb === 'open' || command.verb === 'close') {
+        // Only suggest objects that can be opened/closed
+        if (!command.object) {
             const scene = this.sceneService.getCurrentScene();
-            if (!scene?.objects) return [];
-
-            return Object.values(scene.objects)
-                .filter(obj => obj.isContainer || obj.interactions?.['open'] || obj.interactions?.['close'])
-                .map(obj => obj.name.toLowerCase());
+            if (!scene) return suggestions;
+            if (!scene.objects) return suggestions;
+            
+            const sceneObjects = scene.objects;  // Create a stable reference that TypeScript can track
+            return suggestions.filter(name => {
+                const obj = Object.values(sceneObjects).find(o => o.name.toLowerCase() === name);
+                return obj && 
+                    this.lightMechanics.isObjectVisible(obj) && 
+                    (obj.isContainer || obj.interactions?.['open'] || obj.interactions?.['close']);
+            });
         }
 
-        return [];
+        return suggestions;
     }
 }

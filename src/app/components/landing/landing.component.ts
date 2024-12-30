@@ -116,7 +116,7 @@ export class LandingComponent implements OnInit {
       
       if (this.hasSavedGame) {
         // Get saved game stats without loading the full game
-        const gameText = await firstValueFrom(this.gameText.getGameText());
+        const gameText = await firstValueFrom(this.gameText.getGameText$());
         if (gameText.length > 0) {
           this.savedGameStats = gameText[gameText.length - 1];
         }

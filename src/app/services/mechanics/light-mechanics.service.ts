@@ -82,11 +82,7 @@ export class LightMechanicsService {
         }
 
         // Check if revealed by other actions
-        return this.flagMechanics.isObjectRevealed(object.id) || 
-               Object.entries(state.flags)
-                   .some(([flag, isSet]) => 
-                       isSet && object.descriptions.states?.[flag]
-                   );
+        return this.flagMechanics.isObjectRevealed(object.id);
     }
 
     handleLightSource(sourceId: string, turnOn: boolean): { success: boolean; message: string } {

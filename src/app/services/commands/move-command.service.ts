@@ -10,6 +10,7 @@ import { LightMechanicsService } from '../mechanics/light-mechanics.service';
 import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
 import { ScoreMechanicsService } from '../mechanics/score-mechanics.service';
 import { GameTextService } from '../game-text.service';
+import { ContainerMechanicsService } from '../mechanics/container-mechanics.service';
 
 @Injectable({
     providedIn: 'root'
@@ -24,7 +25,8 @@ export class MoveCommandService extends MovementBaseCommandService {
         lightMechanics: LightMechanicsService,
         inventoryMechanics: InventoryMechanicsService,
         scoreMechanics: ScoreMechanicsService,
-        private gameTextService: GameTextService
+        private gameTextService: GameTextService,
+        containerMechanics: ContainerMechanicsService
     ) {
         super(
             gameState,
@@ -34,7 +36,8 @@ export class MoveCommandService extends MovementBaseCommandService {
             progress,
             lightMechanics,
             inventoryMechanics,
-            scoreMechanics
+            scoreMechanics,
+            containerMechanics
         );
     }
 
@@ -96,7 +99,7 @@ export class MoveCommandService extends MovementBaseCommandService {
         };
     }
 
-    getSuggestions(command: GameCommand): string[] {
+    override async getSuggestions(command: GameCommand): Promise<string[]> {
         if (!command.verb) {
             return ['move'];
         }

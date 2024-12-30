@@ -160,4 +160,25 @@ export class ContainerMechanicsService {
             message: `You put the ${item.name} in the ${container.name}.`
         };
     }
+
+    /**
+     * Get the container that holds an item
+     * @param itemId The ID of the item to check
+     * @returns The container object or null if not in a container
+     */
+    findContainerWithItem(itemId: string): SceneObject | null {
+        const state = this.gameState.getCurrentState();
+        const scene = this.sceneService.getCurrentScene();
+        if (!scene || !scene.objects) return null;
+
+        const sceneObjects = scene.objects;  // Create a stable reference that TypeScript can track
+
+        for (const [containerId, contents] of Object.entries(state.containers)) {
+            if (contents.includes(itemId)) {
+                return sceneObjects[containerId] || null;
+            }
+        }
+
+        return null;
+    }
 }

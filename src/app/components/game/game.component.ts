@@ -41,7 +41,7 @@ export class GameComponent implements OnInit, OnDestroy {
         private gameText: GameTextService,
         private sceneService: SceneService
     ) {
-        this.gameText$ = this.gameText.getGameText();
+        this.gameText$ = this.gameText.getGameText$();
         this.sidebar$ = this.sceneService.getSidebarInfo();
     }
 
@@ -52,7 +52,18 @@ export class GameComponent implements OnInit, OnDestroy {
             // Initialize game systems
             await this.gameService.initializeGame();
 
-            // Check if we have a current game state
+            // Try to load saved game state first
+            const hasSavedGame = await this.gameService.hasSavedGame();
+            if (hasSavedGame) {
+                const success = await this.gameService.loadGame();
+                if (!success) {
+                    console.error('Failed to load saved game');
+                    await this.router.navigate(['/']);
+                    return;
+                }
+            }
+
+            // Check if we have a valid game state
             const state = this.gameService.getCurrentState();
             if (!state || !state.currentScene) {
                 // No valid game state, redirect to landing
