@@ -125,4 +125,39 @@ export class ContainerMechanicsService {
         this.flagMechanics.setContainerOpen(container.id, false);
         return { success: true, message: `You close the ${container.name}.` };
     }
+
+    async putInContainer(item: SceneObject, container: SceneObject): Promise<{ success: boolean; message: string }> {
+        // First check if it's a valid container
+        if (!container.isContainer) {
+            return {
+                success: false,
+                message: `The ${container.name} can't contain things.`
+            };
+        }
+
+        // Check if container is open
+        if (!this.isOpen(container.id)) {
+            return {
+                success: false,
+                message: `The ${container.name} is closed.`
+            };
+        }
+
+        // Check capacity
+        const currentContents = await this.getContainerContents(container.id);
+        if (container.capacity && currentContents.length >= container.capacity) {
+            return {
+                success: false,
+                message: `The ${container.name} is full.`
+            };
+        }
+
+        // Add to container
+        await this.addToContainer(container.id, item.id);
+
+        return {
+            success: true,
+            message: `You put the ${item.name} in the ${container.name}.`
+        };
+    }
 }

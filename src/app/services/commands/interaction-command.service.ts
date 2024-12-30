@@ -36,15 +36,11 @@ export class InteractionCommandService extends BaseObjectCommandService {
     }
 
     canHandle(command: GameCommand): boolean {
-        // Handle general interaction verbs
+        // Only handle general interaction verbs
+        // Specialized verbs should be handled by their respective services
         return command.verb === 'use' || 
-               command.verb === 'open' || 
-               command.verb === 'close' ||
-               command.verb === 'turn' ||
                command.verb === 'push' ||
-               command.verb === 'pull' ||
-               command.verb === 'read' ||
-               command.verb === 'examine';
+               command.verb === 'pull';
     }
 
     async handle(command: GameCommand): Promise<CommandResponse> {
@@ -53,13 +49,22 @@ export class InteractionCommandService extends BaseObjectCommandService {
         }
 
         // Check if we can see
-        if (!this.checkLightInScene()) {
+        if (!this.lightMechanics.isLightPresent()) {
             return this.tooDarkError();
         }
 
         const object = await this.findObject(command.object);
         if (!object) {
             return this.objectNotFoundError(command.object);
+        }
+
+        // Check object visibility
+        if (!await this.checkVisibility(object)) {
+            return {
+                success: false,
+                message: `You don't see any ${command.object} here.`,
+                incrementTurn: false
+            };
         }
 
         // If it's a two-object interaction (e.g., "use key with door")
@@ -80,20 +85,53 @@ export class InteractionCommandService extends BaseObjectCommandService {
             return this.cannotInteractError(command.verb, object.name);
         }
 
-        // Try state-based interaction
-        const result = await this.handleStateInteraction(object, command.verb);
-        
-        // Check for use score if successful
-        if (result.success && command.verb === 'use' && 
-            object.scoring?.use && 
-            !this.flagMechanics.hasFlag(`used_${object.id}`)) {
-            this.scoreMechanics.addScore(object.scoring.use);
-            this.flagMechanics.setFlag(`used_${object.id}`);
+        // Check if object has the specific interaction
+        const interaction = object.interactions?.[command.verb];
+        if (!interaction) {
+            return {
+                success: false,
+                message: `You can't ${command.verb} the ${object.name}.`,
+                incrementTurn: false
+            };
+        }
+
+        // Check required flags
+        if (interaction.requiredFlags && 
+            !this.flagMechanics.checkFlags(interaction.requiredFlags)) {
+            return {
+                success: false,
+                message: interaction.failureMessage || `You can't ${command.verb} the ${object.name} right now.`,
+                incrementTurn: false
+            };
+        }
+
+        // Try state-based interaction first
+        const stateResult = await this.stateMechanics.handleInteraction(object, command.verb);
+        if (stateResult.success) {
+            // Handle scoring if applicable
+            if (command.verb === 'use' && 
+                object.scoring?.['use'] && 
+                !this.flagMechanics.hasFlag(`used_${object.id}`)) {
+                this.scoreMechanics.addScore(object.scoring['use']);
+                this.flagMechanics.setFlag(`used_${object.id}`);
+            }
+
+            // Handle flags
+            if (interaction.grantsFlags) {
+                interaction.grantsFlags.forEach(flag => this.flagMechanics.setFlag(flag));
+            }
+            if (interaction.removesFlags) {
+                interaction.removesFlags.forEach(flag => this.flagMechanics.removeFlag(flag));
+            }
+
+            this.progress.incrementTurns();
+            return { ...stateResult, incrementTurn: true };
         }
 
         return {
-            ...result,
-            incrementTurn: result.success
+            success: false,
+            message: interaction.failureMessage || `You can't ${command.verb} the ${object.name} right now.`,
+            incrementTurn: false
         };
     }
 
@@ -107,21 +145,63 @@ export class InteractionCommandService extends BaseObjectCommandService {
             };
         }
 
+        // Check target visibility
+        if (!await this.checkVisibility(target)) {
+            return {
+                success: false,
+                message: `You don't see any ${command.indirect} here.`,
+                incrementTurn: false
+            };
+        }
+
         // Try interaction with target using object
         const interactionVerb = `${command.verb}_with_${object.id}`;
-        const result = await this.handleStateInteraction(target, interactionVerb);
+        const interaction = target.interactions?.[interactionVerb];
 
-        // Check for special use score for this combination
-        if (result.success && 
-            object.scoring?.containerTargets?.[target.id] && 
-            !this.flagMechanics.hasFlag(`used_${object.id}_with_${target.id}`)) {
-            this.scoreMechanics.addScore(object.scoring.containerTargets[target.id]);
-            this.flagMechanics.setFlag(`used_${object.id}_with_${target.id}`);
+        if (!interaction) {
+            return {
+                success: false,
+                message: `You can't ${command.verb} the ${target.name} with the ${object.name}.`,
+                incrementTurn: false
+            };
+        }
+
+        // Check required flags
+        if (interaction.requiredFlags && 
+            !this.flagMechanics.checkFlags(interaction.requiredFlags)) {
+            return {
+                success: false,
+                message: interaction.failureMessage || `You can't ${command.verb} the ${target.name} with the ${object.name} right now.`,
+                incrementTurn: false
+            };
+        }
+
+        // Try state-based interaction
+        const stateResult = await this.stateMechanics.handleInteraction(target, interactionVerb);
+        if (stateResult.success) {
+            // Handle scoring if applicable
+            if (object.scoring?.containerTargets?.[target.id] && 
+                !this.flagMechanics.hasFlag(`used_${object.id}_with_${target.id}`)) {
+                this.scoreMechanics.addScore(object.scoring.containerTargets[target.id]);
+                this.flagMechanics.setFlag(`used_${object.id}_with_${target.id}`);
+            }
+
+            // Handle flags
+            if (interaction.grantsFlags) {
+                interaction.grantsFlags.forEach(flag => this.flagMechanics.setFlag(flag));
+            }
+            if (interaction.removesFlags) {
+                interaction.removesFlags.forEach(flag => this.flagMechanics.removeFlag(flag));
+            }
+
+            this.progress.incrementTurns();
+            return { ...stateResult, incrementTurn: true };
         }
 
         return {
-            ...result,
-            incrementTurn: result.success
+            success: false,
+            message: interaction.failureMessage || `That doesn't work.`,
+            incrementTurn: false
         };
     }
 
@@ -130,28 +210,30 @@ export class InteractionCommandService extends BaseObjectCommandService {
         const scene = this.sceneService.getCurrentScene();
 
         if (!command.verb) {
-            return ['use', 'open', 'close', 'turn', 'push', 'pull', 'read', 'examine'];
+            // Only suggest verbs this service actually handles
+            return ['use', 'push', 'pull'];
         }
 
         if (!command.object && scene?.objects) {
             // Suggest visible objects that can be interacted with
             Object.values(scene.objects)
-                .filter(obj => this.lightMechanics.isObjectVisible(obj) && 
-                             (obj.usable || obj.interactions?.[command.verb]))
+                .filter(obj => 
+                    this.lightMechanics.isObjectVisible(obj) && 
+                    (obj.usable || obj.interactions?.[command.verb]))
                 .forEach(obj => suggestions.push(obj.name));
 
-            // Add inventory items
+            // Add usable inventory items
             const inventoryItems = this.inventoryMechanics.listInventory();
-            for (const itemId of inventoryItems) {
+            inventoryItems.forEach(itemId => {
                 const item = this.sceneService.findObject(itemId);
                 if (item && (item.usable || item.interactions?.[command.verb])) {
                     suggestions.push(item.name);
                 }
-            }
+            });
         }
 
         if (command.preposition === 'with' && !command.indirect && scene?.objects) {
-            // Suggest potential targets for the interaction
+            // Suggest visible potential targets for the interaction
             Object.values(scene.objects)
                 .filter(obj => this.lightMechanics.isObjectVisible(obj))
                 .forEach(obj => suggestions.push(obj.name));

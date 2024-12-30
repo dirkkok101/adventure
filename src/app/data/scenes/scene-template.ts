@@ -10,14 +10,10 @@ export const sceneTemplate: Scene = {
     region: 'Template Region',
     light: true,
     descriptions: {
-        default: 'This is a template scene. Describe the scene here.',
-        dark: 'It is pitch dark. You are likely to be eaten by a grue.',
+        default: 'This is a template scene. You can see various objects here.',
         states: {
-            // Multiple flags can be combined with commas
-            'someFlag': 'Description when someFlag is set.',
-            'hasItem': 'Description when item is taken.',
-            'someFlag,hasItem': 'Description when both flags are set.',
-            '!someFlag,hasItem': 'Description when someFlag is NOT set but hasItem is.'
+            'someFlag': 'The scene looks different when someFlag is set.',
+            'objectMoved': 'The scene looks different after moving an object.'
         }
     },
     objects: {
@@ -25,9 +21,7 @@ export const sceneTemplate: Scene = {
             id: 'templateObject',
             name: 'Template Object',
             visibleOnEntry: true,
-            canTake: true, // Whether the object can be taken
-            weight: 1, // Weight for inventory purposes
-            isTreasure: false, // Whether this is a treasure for the trophy case
+            canTake: true,
             descriptions: {
                 default: 'Description of the object.',
                 states: {
@@ -37,12 +31,14 @@ export const sceneTemplate: Scene = {
                 }
             },
             interactions: {
+                // Examine is handled by ExamineCommandService
                 examine: {
                     message: 'Examining the object reveals...',
                     states: {
                         'someFlag': 'Different examine description when someFlag is set.'
                     }
                 },
+                // Take is handled by TakeCommandService
                 take: {
                     message: 'You take the object.',
                     failureMessage: 'You cannot take that.',
@@ -50,103 +46,99 @@ export const sceneTemplate: Scene = {
                     removesFlags: ['itemVisible'],
                     score: 5
                 },
-                move: {
-                    message: 'You move the object.',
+                // Push/Pull are physical interactions
+                push: {
+                    message: 'You push the object.',
                     grantsFlags: ['objectMoved'],
-                    revealsObjects: ['hiddenObject'], // Makes other objects visible
+                    revealsObjects: ['hiddenObject'],
                     requiredFlags: ['!objectMoved'],
                     score: 5
                 },
-                read: {
-                    message: 'You read the text on the object.',
-                    requiredFlags: ['hasLight'] // Can require flags for actions
-                },
-                use: {
-                    message: 'You use the object.',
-                    grantsFlags: ['itemUsed'],
-                    removesFlags: ['hasItem'],
-                    requiredFlags: ['hasItem', '!itemUsed'],
-                    score: 10
-                },
-                on: {
-                    message: 'You turn the object on.',
-                    grantsFlags: ['objectOn', 'hasLight'],
-                    requiredFlags: ['hasItem', '!objectOn', '!objectDead'],
-                    failureMessage: 'You can\'t turn that on.'
-                },
-                off: {
-                    message: 'You turn the object off.',
-                    removesFlags: ['objectOn', 'hasLight'],
-                    requiredFlags: ['objectOn']
-                }
-            }
-        },
-        templateContainer: {
-            id: 'templateContainer',
-            name: 'Template Container',
-            visibleOnEntry: true,
-            canTake: false,
-            isContainer: true,
-            isOpen: false,
-            capacity: 5,
-            descriptions: {
-                default: 'Description of the container.',
-                contents: 'The container contains:', // Used when listing contents
-                empty: 'The container is empty.',
-                states: {
-                    'containerOpen': 'The container is open.',
-                    'hasItem': 'Description changes when items are inside.'
-                }
-            },
-            interactions: {
-                examine: {
-                    message: 'The container appears to be closed.',
-                    states: {
-                        'containerOpen': 'The container is open, revealing its contents.',
-                        'containerOpen,hasItem': 'The container is open, containing some items.'
-                    }
-                },
-                open: {
-                    message: 'You open the container.',
-                    grantsFlags: ['containerOpen'],
-                    requiredFlags: ['!containerOpen'],
+                pull: {
+                    message: 'You pull the object.',
+                    grantsFlags: ['objectMoved'],
+                    revealsObjects: ['hiddenObject'],
+                    requiredFlags: ['!objectMoved'],
                     score: 5
                 },
-                close: {
-                    message: 'You close the container.',
-                    removesFlags: ['containerOpen'],
-                    requiredFlags: ['containerOpen']
+                // Read is handled by ReadCommandService
+                read: {
+                    message: 'You read the text on the object.',
+                    requiredFlags: ['hasLight']
                 },
-                enter: {
-                    message: 'You enter the container.',
-                    requiredFlags: ['containerOpen'],
-                    failureMessage: 'The container must be opened first.'
+                // Use interactions for combining items
+                use_with_key: {
+                    message: 'You use the key with the object.',
+                    grantsFlags: ['objectUnlocked'],
+                    removesFlags: ['isLocked'],
+                    requiredFlags: ['hasKey', '!objectUnlocked'],
+                    score: 10
+                }
+            },
+            scoring: {
+                use: 5,
+                containerTargets: {
+                    'targetObject': 10
                 }
             }
         },
         hiddenObject: {
             id: 'hiddenObject',
             name: 'Hidden Object',
-            visibleOnEntry: false, // Hidden until revealed
+            visibleOnEntry: false,
             canTake: true,
-            weight: 1,
             descriptions: {
-                default: 'A previously hidden object.',
+                default: 'This object was hidden until revealed.',
                 states: {
-                    'hasItem': 'Description after taking the hidden item.'
+                    'hasItem': 'Description after taking the hidden object.'
                 }
             },
             interactions: {
                 examine: {
-                    message: 'You examine the hidden object.',
-                    requiredFlags: ['objectMoved'], // Only accessible after being revealed
-                    failureMessage: 'You can\'t see any such thing.'
+                    message: 'The hidden object appears to be important.',
+                    states: {
+                        'someFlag': 'The hidden object looks different when someFlag is set.'
+                    }
                 },
                 take: {
                     message: 'You take the hidden object.',
                     grantsFlags: ['hasHiddenItem'],
-                    requiredFlags: ['objectMoved'],
                     score: 10
+                }
+            }
+        },
+        container: {
+            id: 'container',
+            name: 'Container',
+            visibleOnEntry: true,
+            isContainer: true,
+            capacity: 5,
+            descriptions: {
+                default: 'A container that can hold items.',
+                states: {
+                    'isOpen': 'The container is open.',
+                    'isClosed': 'The container is closed.'
+                }
+            },
+            interactions: {
+                // Open/Close handled by OpenCloseCommandService
+                open: {
+                    message: 'You open the container.',
+                    grantsFlags: ['isOpen'],
+                    removesFlags: ['isClosed'],
+                    requiredFlags: ['!isOpen', '!isLocked']
+                },
+                close: {
+                    message: 'You close the container.',
+                    grantsFlags: ['isClosed'],
+                    removesFlags: ['isOpen']
+                },
+                examine: {
+                    message: 'A sturdy container that can hold items.',
+                    states: {
+                        'isOpen': 'The container is open. Inside you can see:',
+                        'isClosed': 'The container is closed.'
+                    }
                 }
             }
         }
@@ -155,16 +147,9 @@ export const sceneTemplate: Scene = {
         {
             direction: 'north',
             targetScene: 'targetScene',
-            description: 'A path leads north.',
-            requiredFlags: ['someFlag', 'hasLight'], // Can require multiple flags
-            failureMessage: 'You can\'t go that way right now.'
-        },
-        {
-            direction: 'down',
-            targetScene: 'basement',
-            description: 'A staircase leads down.',
-            requiredFlags: ['trapdoorOpen', 'hasLight'],
-            failureMessage: 'You need to open the trapdoor first.'
+            description: 'Path leading north.',
+            requiredFlags: ['someFlag'],
+            failureMessage: 'You cannot go that way right now.'
         }
     ]
 };

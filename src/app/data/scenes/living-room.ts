@@ -6,15 +6,10 @@ export const livingRoom: Scene = {
     region: 'Inside House',
     light: true,
     descriptions: {
-        default: 'You are in the living room. There is a doorway to the east, a wooden door with strange gothic lettering to the west, which appears to be nailed shut, and a large oriental rug in the center of the room. Above the trophy case hangs an elvish sword of great antiquity. A battery-powered brass lantern is on the trophy case.',
+        default: 'You are in the living room of the white house. A trophy case stands against one wall. A large oriental rug is in the center of the room.',
         states: {
-            'rugMoved': 'You are in the living room. There is a doorway to the east and a wooden door with strange gothic lettering to the west. A large oriental rug has been moved aside, revealing a trap door in the floor. Above the trophy case hangs an elvish sword of great antiquity. A battery-powered brass lantern is on the trophy case.',
-            'hasSword': 'You are in the living room. There is a doorway to the east and a wooden door with strange gothic lettering to the west. A large oriental rug covers the floor. A battery-powered brass lantern is on the trophy case.',
-            'hasLantern': 'You are in the living room. There is a doorway to the east and a wooden door with strange gothic lettering to the west. A large oriental rug covers the floor. Above the trophy case hangs an elvish sword of great antiquity.',
-            'hasSword,hasLantern': 'You are in the living room. There is a doorway to the east and a wooden door with strange gothic lettering to the west. A large oriental rug covers the floor.',
-            'rugMoved,hasSword': 'You are in the living room. There is a doorway to the east and a wooden door with strange gothic lettering to the west. A large oriental rug has been moved aside, revealing a trap door in the floor. A battery-powered brass lantern is on the trophy case.',
-            'rugMoved,hasLantern': 'You are in the living room. There is a doorway to the east and a wooden door with strange gothic lettering to the west. A large oriental rug has been moved aside, revealing a trap door in the floor. Above the trophy case hangs an elvish sword of great antiquity.',
-            'rugMoved,hasSword,hasLantern': 'You are in the living room. There is a doorway to the east and a wooden door with strange gothic lettering to the west. A large oriental rug has been moved aside, revealing a trap door in the floor.'
+            'rugMoved': 'You are in the living room of the white house. A trophy case stands against one wall. An oriental rug has been pushed to one side of the room, revealing a trap door.',
+            'trapdoorOpen': 'You are in the living room of the white house. A trophy case stands against one wall. An oriental rug has been pushed to one side of the room, revealing an open trap door leading down into darkness.'
         }
     },
     objects: {
@@ -22,14 +17,13 @@ export const livingRoom: Scene = {
             id: 'trophyCase',
             name: 'Trophy Case',
             visibleOnEntry: true,
-            canTake: false,
             isContainer: true,
-            isOpen: true,
             capacity: 10,
             descriptions: {
-                default: 'A trophy case stands against the wall.',
-                empty: 'The trophy case is empty.',
-                contents: 'The trophy case contains:'
+                default: 'The trophy case is mounted securely to the wall.',
+                states: {
+                    'hasTreasure': 'The trophy case contains your treasures.'
+                }
             },
             interactions: {
                 examine: {
@@ -37,18 +31,6 @@ export const livingRoom: Scene = {
                     states: {
                         'hasTreasure': 'The trophy case contains your treasures.'
                     }
-                },
-                open: {
-                    message: 'The trophy case is already open.',
-                    failureMessage: 'The trophy case is already open.'
-                },
-                close: {
-                    message: 'The trophy case cannot be closed.',
-                    failureMessage: 'The trophy case cannot be closed.'
-                },
-                take: {
-                    message: 'The trophy case is securely fastened to the wall.',
-                    failureMessage: 'The trophy case is securely fastened to the wall.'
                 }
             }
         },
@@ -70,53 +52,49 @@ export const livingRoom: Scene = {
                         'rugMoved': 'The rug has been moved to reveal a trap door.'
                     }
                 },
-                move: {
-                    message: 'With a great effort, you move the rug to one side of the room, revealing a closed trap door.',
+                push: {
+                    message: 'With a great effort, you move the rug to one side of the room, revealing a trap door in the floor!',
                     grantsFlags: ['rugMoved'],
-                    revealsObjects: ['trapDoor'],
-                    score: 5,
-                    requiredFlags: ['!rugMoved']
+                    revealsObjects: ['trapdoor'],
+                    requiredFlags: ['!rugMoved'],
+                    score: 5
                 },
-                take: {
-                    message: 'The rug is extremely heavy, much too heavy to take.',
-                    failureMessage: 'The rug is much too heavy to take.'
+                pull: {
+                    message: 'With a great effort, you move the rug to one side of the room, revealing a trap door in the floor!',
+                    grantsFlags: ['rugMoved'],
+                    revealsObjects: ['trapdoor'],
+                    requiredFlags: ['!rugMoved'],
+                    score: 5
                 }
             }
         },
-        trapDoor: {
-            id: 'trapDoor',
+        trapdoor: {
+            id: 'trapdoor',
             name: 'Trap Door',
             visibleOnEntry: false,
             canTake: false,
             descriptions: {
-                default: 'The trap door is closed.',
+                default: 'A closed trap door is set into the floor.',
                 states: {
-                    'trapDoorOpen': 'The trap door is open, revealing a dark passage below.'
+                    'trapdoorOpen': 'An open trap door reveals a passage leading down into darkness.'
                 }
             },
             interactions: {
                 examine: {
                     message: 'The trap door is closed.',
                     states: {
-                        'trapDoorOpen': 'The trap door is open, revealing a dark passage leading down to a cellar.'
-                    },
-                    requiredFlags: ['rugMoved']
+                        'trapdoorOpen': 'The trap door is open, revealing a dark passage below.'
+                    }
                 },
                 open: {
-                    message: 'The door reluctantly opens to reveal a rickety staircase descending into darkness.',
-                    grantsFlags: ['trapDoorOpen'],
-                    requiredFlags: ['rugMoved', '!trapDoorOpen'],
-                    score: 5
+                    message: 'The trap door opens, revealing a passage leading down into darkness.',
+                    grantsFlags: ['trapdoorOpen'],
+                    requiredFlags: ['!trapdoorOpen']
                 },
                 close: {
-                    message: 'The trap door swings shut and closes with a loud bang.',
-                    removesFlags: ['trapDoorOpen'],
-                    requiredFlags: ['trapDoorOpen']
-                },
-                enter: {
-                    message: 'The trap door must be opened first.',
-                    requiredFlags: ['trapDoorOpen'],
-                    failureMessage: 'The trap door must be opened first.'
+                    message: 'You close the trap door.',
+                    removesFlags: ['trapdoorOpen'],
+                    requiredFlags: ['trapdoorOpen']
                 }
             }
         },
@@ -125,29 +103,28 @@ export const livingRoom: Scene = {
             name: 'Elvish Sword',
             visibleOnEntry: true,
             canTake: true,
-            weight: 3,
+            isTreasure: true,
             descriptions: {
-                default: 'Above the trophy case hangs an elvish sword of great antiquity.',
+                default: 'An elvish sword of great antiquity.',
                 states: {
-                    'enemyNearby': 'Your sword is glowing with a bright blue light!',
-                    'hasSword': 'Your elvish sword is by your side.'
+                    'hasSword': 'Your elvish sword glows with a faint blue light.'
                 }
             },
             interactions: {
                 examine: {
-                    message: 'The sword is of elvish workmanship. Strange runes are inscribed on the blade.',
+                    message: 'The sword is extremely old but in perfect condition. Strange runes are set into the blade.',
                     states: {
-                        'enemyNearby': 'The sword is glowing bright blue - danger must be nearby!',
-                        'hasSword': 'The sword appears to be quite valuable. Strange runes are inscribed on the blade.'
+                        'hasSword': 'The sword glows with a faint blue light. Strange runes are set into the blade.'
                     }
                 },
                 take: {
-                    message: 'Taken. The sword feels perfectly balanced in your hand.',
+                    message: 'Taken.',
                     grantsFlags: ['hasSword'],
                     score: 10
                 },
                 read: {
-                    message: 'The runes are written in an ancient elvish script. They read "Sting is my name, I am the spider\'s bane."'
+                    message: 'The runes say "Sting is my name; I am the spider\'s bane."',
+                    requiredFlags: ['hasLight']
                 }
             }
         },
@@ -196,20 +173,20 @@ export const livingRoom: Scene = {
         {
             direction: 'east',
             targetScene: 'kitchen',
-            description: 'A doorway leads east into the kitchen.'
+            description: 'An entrance to the kitchen is to the east.'
         },
         {
             direction: 'west',
-            targetScene: 'closet',
-            description: 'A wooden door with gothic lettering leads west.',
-            requiredFlags: ['gothicDoorOpen'],
-            failureMessage: 'The door appears to be nailed shut.'
+            targetScene: 'westOfHouse',
+            description: 'The front door leads west.',
+            requiredFlags: ['frontDoorOpen'],
+            failureMessage: 'The front door is closed.'
         },
         {
             direction: 'down',
             targetScene: 'cellar',
-            description: 'A dark staircase leads down into the cellar.',
-            requiredFlags: ['rugMoved', 'trapDoorOpen', 'hasLight'],
+            description: 'A trap door leads down into darkness.',
+            requiredFlags: ['rugMoved', 'trapdoorOpen', 'hasLight'],
             failureMessage: 'You can\'t go that way.'
         }
     ]

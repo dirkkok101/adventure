@@ -123,6 +123,24 @@ export class InventoryMechanicsService {
         });
     }
 
+    async getCurrentWeight(): Promise<number> {
+        const inventoryItems = await Promise.all(
+            this.listInventory().map(id => this.findItemById(id))
+        );
+        return inventoryItems.reduce((total, obj) => 
+            total + (obj?.weight || 0), 0);
+    }
+
+    getMaxWeight(): number {
+        return this.MAX_INVENTORY_WEIGHT;
+    }
+
+    async getContainerContents(itemId: string): Promise<string[]> {
+        const state = this.gameState.getCurrentState();
+        const containers = state.containers || {};
+        return containers[itemId] || [];
+    }
+
     private async findItemById(itemId: string): Promise<SceneObject | null> {
         const scenes = this.sceneService.getAllScenes();
         for (const scene of scenes) {

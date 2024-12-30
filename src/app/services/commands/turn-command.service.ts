@@ -6,6 +6,8 @@ import { SceneService } from '../scene.service';
 import { LightMechanicsService } from '../mechanics/light-mechanics.service';
 import { StateMechanicsService } from '../mechanics/state-mechanics.service';
 import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
+import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
+import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
 
 @Injectable({
     providedIn: 'root'
@@ -14,11 +16,21 @@ export class TurnCommandService extends BaseObjectCommandService {
     constructor(
         gameState: GameStateService,
         sceneService: SceneService,
-        private lightMechanics: LightMechanicsService,
-        private stateMechanics: StateMechanicsService,
-        private inventoryMechanics: InventoryMechanicsService
+        stateMechanics: StateMechanicsService,
+        flagMechanics: FlagMechanicsService,
+        progress: ProgressMechanicsService,
+        lightMechanics: LightMechanicsService,
+        inventoryMechanics: InventoryMechanicsService
     ) {
-        super(gameState, sceneService);
+        super(
+            gameState,
+            sceneService,
+            stateMechanics,
+            flagMechanics,
+            progress,
+            lightMechanics,
+            inventoryMechanics
+        );
     }
 
     canHandle(command: GameCommand): boolean {
@@ -42,6 +54,7 @@ export class TurnCommandService extends BaseObjectCommandService {
             };
         }
 
+        // Find the object and check if it's visible
         const object = await this.findObject(command.object);
         if (!object) {
             return {
@@ -51,12 +64,21 @@ export class TurnCommandService extends BaseObjectCommandService {
             };
         }
 
+        // Check if we can see the object
+        if (!this.lightMechanics.isObjectVisible(object)) {
+            return {
+                success: false,
+                message: "It's too dark to see that.",
+                incrementTurn: false
+            };
+        }
+
         return this.handleInteraction(object, command);
     }
 
     protected async handleInteraction(object: SceneObject, command: GameCommand): Promise<{ success: boolean; message: string; incrementTurn: boolean }> {
         // Check if object can be turned on/off
-        if (!object.canTurnOnOff && !object.interactions?.turn) {
+        if (!object.interactions?.['turn'] && !object.providesLight) {
             return {
                 success: false,
                 message: `You can't turn the ${object.name} on or off.`,
@@ -64,24 +86,47 @@ export class TurnCommandService extends BaseObjectCommandService {
             };
         }
 
+        // For portable light sources, check if they're in inventory
+        if (object.providesLight && object.canTake && !await this.inventoryMechanics.hasItem(object.id)) {
+            return {
+                success: false,
+                message: `You need to take the ${object.name} first.`,
+                incrementTurn: false
+            };
+        }
+
         // Try state-based interaction first
-        const stateResult = this.stateMechanics.handleInteraction(object, `turn_${command.preposition}`);
+        const stateResult = await this.stateMechanics.handleInteraction(object, `turn_${command.preposition}`);
         if (stateResult.success) {
             // If this is a light source, update light state
-            if (object.isLightSource) {
-                this.lightMechanics.setLightSourceState(object.id, command.preposition === 'on');
+            if (object.providesLight) {
+                const lightResult = this.lightMechanics.handleLightSource(object.id, command.preposition === 'on');
+                if (!lightResult.success) {
+                    return { ...lightResult, incrementTurn: false };
+                }
             }
             return { ...stateResult, incrementTurn: true };
         }
 
         // Handle default turn behavior for light sources
-        if (object.isLightSource) {
-            const newState = command.preposition === 'on';
-            this.lightMechanics.setLightSourceState(object.id, newState);
+        if (object.providesLight) {
+            // For lantern, show battery status when turning on
+            if (object.id === 'lantern' && command.preposition === 'on') {
+                const batteryStatus = this.lightMechanics.getLanternBatteryStatus();
+                if (batteryStatus.includes('dead')) {
+                    return {
+                        success: false,
+                        message: batteryStatus,
+                        incrementTurn: false
+                    };
+                }
+            }
+
+            const lightResult = this.lightMechanics.handleLightSource(object.id, command.preposition === 'on');
             return {
-                success: true,
-                message: `You turn the ${object.name} ${command.preposition}.`,
-                incrementTurn: true
+                success: lightResult.success,
+                message: lightResult.message,
+                incrementTurn: lightResult.success
             };
         }
 

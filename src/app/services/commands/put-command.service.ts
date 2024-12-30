@@ -1,102 +1,113 @@
 import { Injectable } from '@angular/core';
-import { CommandHandler } from './command-handler.interface';
+import { GameCommand, SceneObject, CommandResponse } from '../../models/game-state.model';
+import { ContainerBaseCommandService } from './bases/container-base-command.service';
 import { GameStateService } from '../game-state.service';
 import { SceneService } from '../scene.service';
-import { ContainerMechanicsService } from '../mechanics/container-mechanics.service';
-import { LightMechanicsService } from '../mechanics/light-mechanics.service';
 import { StateMechanicsService } from '../mechanics/state-mechanics.service';
+import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
+import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
+import { LightMechanicsService } from '../mechanics/light-mechanics.service';
+import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
+import { ContainerMechanicsService } from '../mechanics/container-mechanics.service';
+import { ScoreMechanicsService } from '../mechanics/score-mechanics.service';
+import { GameTextService } from '../game-text.service';
 
 @Injectable({
     providedIn: 'root'
 })
-export class PutCommandService implements CommandHandler {
+export class PutCommandService extends ContainerBaseCommandService {
     constructor(
-        private gameState: GameStateService,
-        private sceneService: SceneService,
-        private containerMechanics: ContainerMechanicsService,
-        private lightMechanics: LightMechanicsService,
-        private stateMechanics: StateMechanicsService
-    ) {}
-
-    canHandle(command: string): boolean {
-        return command.toLowerCase().startsWith('put ');
+        gameState: GameStateService,
+        sceneService: SceneService,
+        stateMechanics: StateMechanicsService,
+        flagMechanics: FlagMechanicsService,
+        progress: ProgressMechanicsService,
+        lightMechanics: LightMechanicsService,
+        inventoryMechanics: InventoryMechanicsService,
+        private containerMechanics: ContainerMechanicsService
+    ) {
+        super(
+            gameState,
+            sceneService,
+            stateMechanics,
+            flagMechanics,
+            progress,
+            lightMechanics,
+            inventoryMechanics
+        );
     }
 
-    async handle(command: string): Promise<string> {
-        const words = command.toLowerCase().split(' ');
-        const itemName = words.slice(1).join(' ');
+    canHandle(command: GameCommand): boolean {
+        return command.verb === 'put';
+    }
 
-        // Check for "in" or "on" preposition
-        const inIndex = itemName.indexOf(' in ');
-        const onIndex = itemName.indexOf(' on ');
-        
-        if (inIndex === -1 && onIndex === -1) {
-            return 'Put what where?';
+    async handle(command: GameCommand): Promise<CommandResponse> {
+        if (!command.object) {
+            return this.noObjectError(command.verb);
         }
 
-        const prepositionIndex = Math.max(inIndex, onIndex);
-        const preposition = itemName.includes(' in ') ? 'in' : 'on';
-        const objectName = itemName.substring(0, prepositionIndex).trim();
-        const containerName = itemName.substring(prepositionIndex + 4).trim();
-
-        const scene = this.sceneService.getCurrentScene();
-        if (!scene) {
-            return 'Error: No current scene';
+        const object = await this.findObject(command.object);
+        if (!object) {
+            return this.objectNotFoundError(command.object);
         }
 
+        return this.handleInteraction(object, command);
+    }
+
+    protected async handleInteraction(object: SceneObject, command: GameCommand): Promise<CommandResponse> {
         // Check light
         if (!this.lightMechanics.isLightPresent()) {
-            return 'It is too dark to see what you are doing.';
+            return {
+                success: false,
+                message: 'It is too dark to see what you are doing.',
+                incrementTurn: false
+            };
         }
 
-        // Find the item and container
-        const item = Object.values(scene.objects || {}).find(obj => 
-            obj.name.toLowerCase() === objectName
-        );
-
-        const container = Object.values(scene.objects || {}).find(obj => 
-            obj.name.toLowerCase() === containerName && 
-            this.lightMechanics.isObjectVisible(obj)
-        );
-
-        if (!item) {
-            return `You don't have the ${objectName}.`;
+        if (!command.preposition || !command.indirect) {
+            return {
+                success: false,
+                message: 'Put what where?',
+                incrementTurn: false
+            };
         }
 
+        // Get the container object
+        const container = await this.findObject(command.indirect);
         if (!container) {
-            return `You don't see any ${containerName} here.`;
+            return {
+                success: false,
+                message: `You don't see any ${command.indirect} here.`,
+                incrementTurn: false
+            };
         }
 
-        // Check if item is in inventory
-        const state = this.gameState.getCurrentState();
-        if (!state.inventory[item.id]) {
-            return `You're not holding the ${item.name}.`;
+        // Check if object is in inventory
+        if (!await this.inventoryMechanics.hasItem(object.id)) {
+            return {
+                success: false,
+                message: `You don't have the ${object.name}.`,
+                incrementTurn: false
+            };
         }
 
-        // Check if container can accept items
-        if (!container.isContainer) {
-            return `You can't put anything ${preposition} that.`;
-        }
-
-        if (!container.isOpen) {
-            return `The ${container.name} is closed.`;
-        }
-
-        // Try to add to container
-        if (!this.containerMechanics.canAddToContainer(container.id, item.id)) {
-            return `You can't put anything else ${preposition} the ${container.name}.`;
-        }
-
-        // Remove from inventory and add to container
-        this.gameState.removeFromInventory(item.id);
-        this.containerMechanics.addToContainer(container.id, item.id);
-
-        // Handle state changes
-        const stateResult = this.stateMechanics.handleInteraction(container, 'put');
+        // Check for state-based interactions first
+        const stateResult = await this.stateMechanics.handleInteraction(container, 'put');
         if (stateResult.success) {
-            return stateResult.message;
+            // If state handling was successful, remove from inventory
+            await this.inventoryMechanics.removeFromInventory(object.id);
+            return { ...stateResult, incrementTurn: true };
         }
 
-        return `You put the ${item.name} ${preposition} the ${container.name}.`;
+        // If no state handling, try container mechanics
+        const result = await this.containerMechanics.putInContainer(object, container);
+        if (result.success) {
+            await this.inventoryMechanics.removeFromInventory(object.id);
+            
+            // Increment turns for successful action
+            this.progress.incrementTurns();
+        }
+
+        return { ...result, incrementTurn: result.success };
     }
 }

@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { GameCommand } from '../../models/game-state.model';
+import { GameCommand, CommandResponse } from '../../models/game-state.model';
 import { GameStateService } from '../game-state.service';
 import { SceneService } from '../scene.service';
 import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
@@ -7,118 +7,76 @@ import { ProgressMechanicsService } from '../mechanics/progress-mechanics.servic
 import { LightMechanicsService } from '../mechanics/light-mechanics.service';
 import { StateMechanicsService } from '../mechanics/state-mechanics.service';
 import { ScoreMechanicsService } from '../mechanics/score-mechanics.service';
+import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
+import { MovementBaseCommandService } from './bases/movement-base-command.service';
 
 @Injectable({
     providedIn: 'root'
 })
-export class MovementCommandService {
-    private readonly DIRECTIONS = new Set([
-        'north', 'south', 'east', 'west', 'up', 'down',
-        'n', 's', 'e', 'w', 'u', 'd'
-    ]);
-
-    private readonly DIRECTION_ALIASES: { [key: string]: string } = {
-        'n': 'north',
-        's': 'south',
-        'e': 'east',
-        'w': 'west',
-        'u': 'up',
-        'd': 'down'
-    };
-
+export class MovementCommandService extends MovementBaseCommandService {
     constructor(
-        private gameState: GameStateService,
-        private sceneService: SceneService,
-        private flagMechanics: FlagMechanicsService,
-        private progressMechanics: ProgressMechanicsService,
-        private lightMechanics: LightMechanicsService,
-        private stateMechanics: StateMechanicsService,
-        private scoreMechanics: ScoreMechanicsService
-    ) {}
-
-    canHandle(command: GameCommand): boolean {
-        return this.DIRECTIONS.has(command.verb) || 
-               command.verb === 'go' || 
-               command.verb === 'move';
+        gameState: GameStateService,
+        sceneService: SceneService,
+        stateMechanics: StateMechanicsService,
+        flagMechanics: FlagMechanicsService,
+        progress: ProgressMechanicsService,
+        lightMechanics: LightMechanicsService,
+        inventoryMechanics: InventoryMechanicsService,
+        scoreMechanics: ScoreMechanicsService
+    ) {
+        super(
+            gameState,
+            sceneService,
+            stateMechanics,
+            flagMechanics,
+            progress,
+            lightMechanics,
+            inventoryMechanics,
+            scoreMechanics
+        );
     }
 
-    async handle(command: GameCommand): Promise<{ success: boolean; message: string; incrementTurn: boolean }> {
-        const currentScene = this.sceneService.getCurrentScene();
-        if (!currentScene) {
-            return { 
-                success: false, 
-                message: "You can't go that way.", 
-                incrementTurn: false 
-            };
+    canHandle(command: GameCommand): boolean {
+        return command.verb === 'enter' || this.resolveDirection(command) !== null;
+    }
+
+    async handle(command: GameCommand): Promise<CommandResponse> {
+        // Try directional movement first
+        const direction = this.resolveDirection(command);
+        if (direction) {
+            return this.handleMovement(direction);
         }
 
-        // Get direction from command
-        let direction = command.verb;
-        if (command.verb === 'go' || command.verb === 'move') {
-            if (!command.object || !this.DIRECTIONS.has(command.object)) {
+        // If not a direction and it's an enter command, try object movement
+        if (command.verb === 'enter') {
+            if (!command.object) {
                 return {
                     success: false,
-                    message: "Which direction do you want to go?",
+                    message: 'What do you want to enter?',
                     incrementTurn: false
                 };
             }
-            direction = command.object;
+            return this.handleObjectMovement(command.object);
         }
 
-        // Resolve direction alias
-        direction = this.DIRECTION_ALIASES[direction] || direction;
-
-        // Check if we can see where we're going
-        if (!this.lightMechanics.isLightPresent() && !currentScene.light) {
-            return {
-                success: false,
-                message: "It's too dark to see where you're going.",
-                incrementTurn: false
-            };
-        }
-
-        const exit = currentScene.exits?.find(e => e.direction === direction);
-        if (!exit) {
-            return { 
-                success: false, 
-                message: "You can't go that way.", 
-                incrementTurn: false 
-            };
-        }
-
-        // Check required flags
-        if (exit.requiredFlags && !this.flagMechanics.checkFlags(exit.requiredFlags)) {
-            return { 
-                success: false, 
-                message: exit.failureMessage || "You can't go that way.", 
-                incrementTurn: false 
-            };
-        }
-
-        // Handle score for first time visiting
-        if (exit.score && !this.flagMechanics.hasFlag(`visited_${exit.targetScene}`)) {
-            this.scoreMechanics.addScore(exit.score);
-            this.flagMechanics.setFlag(`visited_${exit.targetScene}`);
-        }
-
-        // Move to new scene
-        this.gameState.setCurrentScene(exit.targetScene);
-        const newScene = this.sceneService.getScene(exit.targetScene);
-
-        if (!newScene) {
-            return { 
-                success: false, 
-                message: "Error: Target scene not found.", 
-                incrementTurn: true 
-            };
-        }
-
-        // Get scene description with state-based variations
-        const description = this.sceneService.getSceneDescription(newScene);
         return {
-            success: true,
-            message: description,
-            incrementTurn: true
+            success: false,
+            message: "I don't understand that direction.",
+            incrementTurn: false
         };
+    }
+
+    getSuggestions(command: GameCommand): string[] {
+        if (command.verb === 'enter' && !command.object) {
+            const scene = this.sceneService.getCurrentScene();
+            if (!scene?.objects || !this.checkLightInScene()) {
+                return [];
+            }
+            // Return names of visible objects that might be enterable
+            return Object.values(scene.objects)
+                .filter(obj => this.lightMechanics.isObjectVisible(obj))
+                .map(obj => obj.name);
+        }
+        return this.getDirectionSuggestions();
     }
 }

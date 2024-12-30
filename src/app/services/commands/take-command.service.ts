@@ -7,6 +7,8 @@ import { LightMechanicsService } from '../mechanics/light-mechanics.service';
 import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
 import { StateMechanicsService } from '../mechanics/state-mechanics.service';
 import { ContainerMechanicsService } from '../mechanics/container-mechanics.service';
+import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
+import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
 
 @Injectable({
     providedIn: 'root'
@@ -15,12 +17,22 @@ export class TakeCommandService extends BaseObjectCommandService {
     constructor(
         gameState: GameStateService,
         sceneService: SceneService,
+        private stateMechanics: StateMechanicsService,
+        private flagMechanics: FlagMechanicsService,
+        private progress: ProgressMechanicsService,
         private lightMechanics: LightMechanicsService,
         private inventoryMechanics: InventoryMechanicsService,
-        private stateMechanics: StateMechanicsService,
         private containerMechanics: ContainerMechanicsService
     ) {
-        super(gameState, sceneService);
+        super(
+            gameState,
+            sceneService,
+            stateMechanics,
+            flagMechanics,
+            progress,
+            lightMechanics,
+            inventoryMechanics
+        );
     }
 
     canHandle(command: GameCommand): boolean {

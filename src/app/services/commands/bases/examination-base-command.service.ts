@@ -94,7 +94,7 @@ export abstract class ExaminationBaseCommandService extends BaseCommandService {
     }
 
     protected async getExaminableSuggestions(): Promise<string[]> {
-        const scene = this.sceneService.getCurrentScene();
+        const scene = await this.sceneService.getCurrentScene();
         if (!scene?.objects || !this.checkLightInScene()) {
             return [];
         }

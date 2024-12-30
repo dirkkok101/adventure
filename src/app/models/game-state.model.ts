@@ -45,6 +45,8 @@ export interface SceneObject {
     visibleOnEntry?: boolean;
     canTake?: boolean;
     usable?: boolean;
+    moveable?: boolean; // Whether the object can be moved
+    onMove?: string; // Custom message when moving the object
     weight?: number;
     isContainer?: boolean;
     isOpen?: boolean; // Whether container is open

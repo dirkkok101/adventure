@@ -1,55 +1,60 @@
 import { Injectable } from '@angular/core';
-import { GameCommand, SceneObject } from '../../models/game-state.model';
-import { BaseObjectCommandService } from './base-object-command.service';
+import { GameCommand, SceneObject, CommandResponse } from '../../models/game-state.model';
+import { ContainerBaseCommandService } from './bases/container-base-command.service';
 import { GameStateService } from '../game-state.service';
 import { SceneService } from '../scene.service';
-import { ContainerMechanicsService } from '../mechanics/container-mechanics.service';
 import { StateMechanicsService } from '../mechanics/state-mechanics.service';
 import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
 import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
 import { LightMechanicsService } from '../mechanics/light-mechanics.service';
 import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
+import { ContainerMechanicsService } from '../mechanics/container-mechanics.service';
+import { ScoreMechanicsService } from '../mechanics/score-mechanics.service';
+import { GameTextService } from '../game-text.service';
 
 @Injectable({
     providedIn: 'root'
 })
-export class OpenCloseCommandService extends BaseObjectCommandService {
+export class OpenCloseCommandService extends ContainerBaseCommandService {
     constructor(
         gameState: GameStateService,
         sceneService: SceneService,
-        protected override stateMechanics: StateMechanicsService,
-        protected override flagMechanics: FlagMechanicsService,
-        protected override progress: ProgressMechanicsService,
-        private containerMechanics: ContainerMechanicsService,
-        private lightMechanics: LightMechanicsService,
-        private inventoryMechanics: InventoryMechanicsService
+        stateMechanics: StateMechanicsService,
+        flagMechanics: FlagMechanicsService,
+        progress: ProgressMechanicsService,
+        lightMechanics: LightMechanicsService,
+        inventoryMechanics: InventoryMechanicsService,
+        private containerMechanics: ContainerMechanicsService
     ) {
-        super(gameState, sceneService, stateMechanics, flagMechanics, progress);
+        super(
+            gameState,
+            sceneService,
+            stateMechanics,
+            flagMechanics,
+            progress,
+            lightMechanics,
+            inventoryMechanics
+        );
     }
 
     canHandle(command: GameCommand): boolean {
         return command.verb === 'open' || command.verb === 'close' || command.verb === 'shut';
     }
 
-    async handle(command: GameCommand): Promise<{ success: boolean; message: string; incrementTurn: boolean }> {
-        const result = await this.handleObjectCommand(command);
-        if (!result.success) {
-            return result;
+    async handle(command: GameCommand): Promise<CommandResponse> {
+        if (!command.object) {
+            return this.noObjectError(command.verb);
         }
 
-        const object = await this.findObject(command.object!);
+        const object = await this.findObject(command.object);
         if (!object) {
-            return {
-                success: false,
-                message: `You don't see any ${command.object} here.`,
-                incrementTurn: false
-            };
+            return this.objectNotFoundError(command.object);
         }
 
         return this.handleInteraction(object, command);
     }
 
-    protected async handleInteraction(object: SceneObject, command: GameCommand): Promise<{ success: boolean; message: string; incrementTurn: boolean }> {
+    protected async handleInteraction(object: SceneObject, command: GameCommand): Promise<CommandResponse> {
         // Check if we can see what we're trying to interact with
         if (!this.lightMechanics.isLightPresent()) {
             return {
@@ -59,10 +64,26 @@ export class OpenCloseCommandService extends BaseObjectCommandService {
             };
         }
 
+        // Check if object is visible
+        if (!await this.checkVisibility(object)) {
+            return {
+                success: false,
+                message: `You don't see any ${command.object} here.`,
+                incrementTurn: false
+            };
+        }
+
         const isOpenCommand = command.verb === 'open';
         const action = isOpenCommand ? 'open' : 'close';
 
-        // Check if object can be opened/closed
+        // Try state-based interaction first
+        const stateResult = await this.stateMechanics.handleInteraction(object, action);
+        if (stateResult.success) {
+            this.progress.incrementTurns();
+            return { ...stateResult, incrementTurn: true };
+        }
+
+        // Check if object has the specific interaction
         if (!object.isContainer && !object.interactions?.[action]) {
             return {
                 success: false,
@@ -71,104 +92,53 @@ export class OpenCloseCommandService extends BaseObjectCommandService {
             };
         }
 
-        // Check current state
-        const isOpen = object.isOpen || false;
-        if (isOpenCommand === isOpen) {
+        // If it's a container, use container mechanics
+        if (object.isContainer) {
+            const result = isOpenCommand ? 
+                await this.containerMechanics.openContainer(object) :
+                await this.containerMechanics.closeContainer(object);
+
+            if (result.success) {
+                this.progress.incrementTurns();
+            }
+            return { ...result, incrementTurn: result.success };
+        }
+
+        // Handle non-container interactions
+        const interaction = object.interactions?.[action];
+        if (!interaction) {
             return {
                 success: false,
-                message: `The ${object.name} is already ${isOpen ? 'open' : 'closed'}.`,
+                message: `You can't ${action} the ${object.name}.`,
                 incrementTurn: false
             };
         }
 
-        // Check if it's locked (only for opening)
-        if (isOpenCommand && object.isLocked) {
-            const keyId = object.contents?.find(id => id.startsWith('key_'));
-            if (keyId) {
-                const hasKey = this.inventoryMechanics.hasItem(keyId);
-                if (!hasKey) {
-                    return {
-                        success: false,
-                        message: `The ${object.name} is locked.`,
-                        incrementTurn: false
-                    };
-                }
-                // Use the key automatically if we have it
-                object.isLocked = false;
-            } else {
-                return {
-                    success: false,
-                    message: `The ${object.name} is locked.`,
-                    incrementTurn: false
-                };
-            }
+        // Check required flags
+        if (interaction.requiredFlags && 
+            !this.flagMechanics.checkFlags(interaction.requiredFlags)) {
+            return {
+                success: false,
+                message: interaction.failureMessage || `You can't ${action} the ${object.name} right now.`,
+                incrementTurn: false
+            };
         }
 
-        // Try state-based interaction first
-        const stateResult = this.stateMechanics.handleInteraction(object, action);
-        if (stateResult.success) {
-            // Update container state if applicable
-            if (object.isContainer) {
-                object.isOpen = isOpenCommand;
-                
-                // Add contents description for opening
-                if (isOpenCommand && object.contents && object.contents.length > 0) {
-                    const contentsList = object.contents
-                        .map(id => {
-                            const item = this.findObject(id);
-                            return item ? item.name : '';
-                        })
-                        .filter(Boolean)
-                        .join(', ');
-                    
-                    return {
-                        success: true,
-                        message: `${stateResult.message}\nInside you see: ${contentsList}`,
-                        incrementTurn: true
-                    };
-                }
-            }
-            return { ...stateResult, incrementTurn: true };
+        // Handle flags
+        if (interaction.grantsFlags) {
+            interaction.grantsFlags.forEach(flag => this.flagMechanics.setFlag(flag));
+        }
+        if (interaction.removesFlags) {
+            interaction.removesFlags.forEach(flag => this.flagMechanics.removeFlag(flag));
         }
 
-        // Default container behavior
-        if (object.isContainer) {
-            object.isOpen = isOpenCommand;
-            
-            if (isOpenCommand) {
-                if (object.contents && object.contents.length > 0) {
-                    const contentsList = object.contents
-                        .map(id => {
-                            const item = this.findObject(id);
-                            return item ? item.name : '';
-                        })
-                        .filter(Boolean)
-                        .join(', ');
-                    
-                    return {
-                        success: true,
-                        message: `You open the ${object.name}.\nInside you see: ${contentsList}`,
-                        incrementTurn: true
-                    };
-                }
-                return {
-                    success: true,
-                    message: `You open the ${object.name}. It's empty.`,
-                    incrementTurn: true
-                };
-            } else {
-                return {
-                    success: true,
-                    message: `You close the ${object.name}.`,
-                    incrementTurn: true
-                };
-            }
-        }
+        // Increment turns for successful action
+        this.progress.incrementTurns();
 
         return {
-            success: false,
-            message: `You can't figure out how to ${action} the ${object.name}.`,
-            incrementTurn: false
+            success: true,
+            message: interaction.message,
+            incrementTurn: true
         };
     }
 }

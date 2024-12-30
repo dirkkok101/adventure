@@ -10,7 +10,6 @@ import { TakeCommandService } from './take-command.service';
 import { PutCommandService } from './put-command.service';
 import { ReadCommandService } from './read-command.service';
 import { TurnCommandService } from './turn-command.service';
-import { EnterCommandService } from './enter-command.service';
 import { GameTextService } from '../game-text.service';
 import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
 
@@ -63,7 +62,6 @@ export class CommandService {
         private putCommand: PutCommandService,
         private readCommand: ReadCommandService,
         private turnCommand: TurnCommandService,
-        private enterCommand: EnterCommandService,
         private gameText: GameTextService,
         private progress: ProgressMechanicsService
     ) {

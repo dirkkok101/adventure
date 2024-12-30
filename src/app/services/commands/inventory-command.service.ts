@@ -1,30 +1,49 @@
 import { Injectable } from '@angular/core';
-import { GameCommand, SceneObject } from '../../models/game-state.model';
-import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
-import { GameTextService } from '../game-text.service';
-import { StateMechanicsService } from '../mechanics/state-mechanics.service';
+import { GameCommand, SceneObject, CommandResponse } from '../../models/game-state.model';
+import { BaseObjectCommandService } from './base-object-command.service';
 import { GameStateService } from '../game-state.service';
 import { SceneService } from '../scene.service';
+import { StateMechanicsService } from '../mechanics/state-mechanics.service';
+import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
+import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
+import { LightMechanicsService } from '../mechanics/light-mechanics.service';
+import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
+import { GameTextService } from '../game-text.service';
 
 @Injectable({
     providedIn: 'root'
 })
-export class InventoryCommandService {
+export class InventoryCommandService extends BaseObjectCommandService {
     constructor(
-        private inventoryMechanics: InventoryMechanicsService,
-        private gameText: GameTextService,
-        private stateMechanics: StateMechanicsService,
-        private gameState: GameStateService,
-        private sceneService: SceneService
-    ) {}
+        gameState: GameStateService,
+        sceneService: SceneService,
+        stateMechanics: StateMechanicsService,
+        flagMechanics: FlagMechanicsService,
+        progress: ProgressMechanicsService,
+        lightMechanics: LightMechanicsService,
+        inventoryMechanics: InventoryMechanicsService,
+        private gameText: GameTextService
+    ) {
+        super(
+            gameState,
+            sceneService,
+            stateMechanics,
+            flagMechanics,
+            progress,
+            lightMechanics,
+            inventoryMechanics
+        );
+    }
 
     canHandle(command: GameCommand): boolean {
         return command.verb === 'inventory' || command.verb === 'i' || command.verb === 'inv';
     }
 
-    async handle(command: GameCommand): Promise<{ success: boolean; message: string; incrementTurn: boolean }> {
+    async handle(command: GameCommand): Promise<CommandResponse> {
+        // Get inventory items
         const itemIds = this.inventoryMechanics.listInventory();
         
+        // No items case
         if (itemIds.length === 0) {
             return {
                 success: true,
@@ -33,50 +52,49 @@ export class InventoryCommandService {
             };
         }
 
+        // Get objects and their descriptions
         const items: SceneObject[] = [];
         for (const id of itemIds) {
-            const item = await this.findItem(id);
+            const item = await this.sceneService.findObject(id);
             if (item) {
                 items.push(item);
             }
         }
 
-        if (items.length === 0) {
-            return {
-                success: true,
-                message: "You aren't carrying anything.",
-                incrementTurn: false
-            };
-        }
+        // Build inventory list with descriptions
+        const itemDescriptions = await Promise.all(items.map(async item => {
+            // Check if item has a special state description
+            const defaultDesc = item.descriptions?.['default'] || '';
+            const stateDesc = await this.stateMechanics.getStateBasedDescription(
+                { states: item.descriptions?.states },
+                defaultDesc
+            );
+            if (stateDesc && stateDesc !== defaultDesc) {
+                return `- ${item.name}: ${stateDesc}`;
+            }
 
-        const itemDescriptions = items.map(item => {
-            const desc = item.descriptions.states?.[item.descriptions.default] || item.descriptions.default;
-            return `- ${item.name}${desc !== item.descriptions.default ? `: ${desc}` : ''}`;
-        });
+            // Check if item is a container and has contents
+            const contents = await this.inventoryMechanics.getContainerContents(item.id);
+            if (contents && contents.length > 0) {
+                const contentItems = await Promise.all(contents.map(id => this.sceneService.findObject(id)));
+                const contentNames = contentItems.filter(Boolean).map(obj => obj?.name).join(', ');
+                return `- ${item.name} (containing: ${contentNames})`;
+            }
+
+            // Default description
+            return `- ${item.name}`;
+        }));
+
+        // Calculate total weight if weight tracking is enabled
+        const totalWeight = await this.inventoryMechanics.getCurrentWeight();
+        const maxWeight = await this.inventoryMechanics.getMaxWeight();
+        const weightInfo = totalWeight > 0 ? `\nTotal weight: ${totalWeight}/${maxWeight}` : '';
 
         return {
             success: true,
-            message: `You are carrying:\n${itemDescriptions.join('\n')}`,
+            message: `You are carrying:\n${itemDescriptions.join('\n')}${weightInfo}`,
             incrementTurn: false
         };
-    }
-
-    private async findItem(id: string): Promise<SceneObject | null> {
-        // First check current scene
-        const currentScene = this.sceneService.getCurrentScene();
-        if (currentScene?.objects?.[id]) {
-            return currentScene.objects[id];
-        }
-
-        // Then check all scenes
-        const scenes = this.sceneService.getAllScenes();
-        for (const scene of scenes) {
-            if (scene.objects?.[id]) {
-                return scene.objects[id];
-            }
-        }
-
-        return null;
     }
 
     getSuggestions(command: GameCommand): string[] {
