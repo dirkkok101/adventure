@@ -9,7 +9,7 @@ import { StateMechanicsService } from '../mechanics/state-mechanics.service';
 @Injectable({
     providedIn: 'root'
 })
-export class TakeCommandService implements CommandHandler {
+export class DropCommandService implements CommandHandler {
     constructor(
         private gameState: GameStateService,
         private sceneService: SceneService,
@@ -19,22 +19,15 @@ export class TakeCommandService implements CommandHandler {
     ) {}
 
     canHandle(command: string): boolean {
-        return command.toLowerCase().startsWith('take ') || 
-               command.toLowerCase().startsWith('get ') ||
-               command.toLowerCase().startsWith('pick up ');
+        return command.toLowerCase().startsWith('drop ');
     }
 
     handle(command: string): string {
         const words = command.toLowerCase().split(' ');
-        const verb = words[0];
-        let objectName = words.slice(1).join(' ');
-
-        if (verb === 'pick') {
-            objectName = words.slice(2).join(' '); // Skip 'pick up'
-        }
+        const objectName = words.slice(1).join(' ');
 
         if (!objectName) {
-            return 'What do you want to take?';
+            return 'What do you want to drop?';
         }
 
         const scene = this.sceneService.getCurrentScene();
@@ -42,27 +35,22 @@ export class TakeCommandService implements CommandHandler {
             return 'Error: No current scene';
         }
 
-        // Check light
-        if (!this.lightMechanics.isLightPresent()) {
-            return 'It is too dark to see what you are trying to take.';
-        }
-
-        // Find object in scene
+        // Find object in inventory
         const object = Object.values(scene.objects || {}).find(obj => 
-            obj.name.toLowerCase() === objectName && 
-            this.lightMechanics.isObjectVisible(obj)
+            obj.name.toLowerCase() === objectName &&
+            this.inventoryMechanics.hasItem(obj.id)
         );
 
         if (!object) {
-            return 'You don\'t see that here.';
+            return 'You are not carrying that.';
         }
 
-        // Try to take the object
-        const result = this.inventoryMechanics.takeObject(object);
+        // Try to drop the object
+        const result = this.inventoryMechanics.dropObject(object);
         
-        // Handle any state changes from taking the object
+        // Handle any state changes from dropping the object
         if (result.success) {
-            const stateResult = this.stateMechanics.handleInteraction(object, 'take');
+            const stateResult = this.stateMechanics.handleInteraction(object, 'drop');
             if (stateResult.success) {
                 return stateResult.message;
             }

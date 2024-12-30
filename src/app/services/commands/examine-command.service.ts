@@ -1,65 +1,74 @@
 import { Injectable } from '@angular/core';
-import { Command } from '../../models/command.model';
-import { GameState, SceneInteraction } from '../../models/game-state.model';
-import { SceneService } from '../scene.service';
+import { GameCommand } from '../../models/game-state.model';
 import { GameStateService } from '../game-state.service';
-import { handleInteraction } from '../../data/game-mechanics';
-import { CommandHandler } from './command-handler.interface';
+import { SceneService } from '../scene.service';
+import { StateMechanicsService } from '../mechanics/state-mechanics.service';
+import { ContainerMechanicsService } from '../mechanics/container-mechanics.service';
+import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
+import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
+import { BaseObjectCommandService } from './base-object-command.service';
 
 @Injectable({
     providedIn: 'root'
 })
-export class ExamineCommandService implements CommandHandler {
+export class ExamineCommandService extends BaseObjectCommandService {
     constructor(
-        private sceneService: SceneService,
-        private gameState: GameStateService
-    ) {}
-
-    processCommand(command: Command): string {
-        if (!command.object) {
-            return "What do you want to examine?";
-        }
-
-        return this.examineObject(command.object);
+        gameState: GameStateService,
+        sceneService: SceneService,
+        stateMechanics: StateMechanicsService,
+        flagMechanics: FlagMechanicsService,
+        progress: ProgressMechanicsService,
+        private containerMechanics: ContainerMechanicsService
+    ) {
+        super(gameState, sceneService, stateMechanics, flagMechanics, progress);
     }
 
-    private examineObject(objectName: string): string {
-        const state = this.gameState.getCurrentState();
-        const scene = this.sceneService.getCurrentScene();
+    canHandle(command: GameCommand): boolean {
+        return command.verb === 'examine' || 
+               command.verb === 'x' ||
+               command.verb === 'look at';
+    }
 
-        if (!scene) {
-            return "Error: No current scene";
+    handle(command: GameCommand): { success: boolean; message: string; incrementTurn: boolean } {
+        const result = this.handleObjectCommand(command);
+        if (!result.success) {
+            return result;
         }
 
-        // First check inventory
-        const inventoryObject = Object.values(scene.objects || {}).find(obj => 
-            obj.name.toLowerCase() === objectName.toLowerCase() && 
-            state.inventory[obj.id]
-        );
+        const object = this.findObject(command.object!);
+        if (!object) {
+            return {
+                success: false,
+                message: 'You don\'t see that here.',
+                incrementTurn: false
+            };
+        }
 
-        if (inventoryObject) {
-            const interaction = inventoryObject.interactions?.['examine'];
-            if (interaction) {
-                return handleInteraction(interaction, state);
+        // If it's a container, add contents description
+        if (object.isContainer) {
+            const contents = this.containerMechanics.getContainerContents(object.id);
+            if (contents.length > 0) {
+                const contentsList = contents
+                    .map(id => {
+                        const item = this.findObject(id);
+                        return item ? item.name : '';
+                    })
+                    .filter(name => name)
+                    .join(', ');
+                return {
+                    success: true,
+                    message: `${result.message}\n${object.descriptions.contents}\n${contentsList}`,
+                    incrementTurn: true
+                };
+            } else {
+                return {
+                    success: true,
+                    message: `${result.message}\n${object.descriptions.empty}`,
+                    incrementTurn: true
+                };
             }
-            return inventoryObject.descriptions.default;
         }
 
-        // Then check visible objects in the scene
-        const sceneObject = Object.values(scene.objects || {}).find(obj => {
-            const isVisible = obj.visibleOnEntry || state.flags[`revealed_${obj.id}`];
-            return obj.name.toLowerCase() === objectName.toLowerCase() && isVisible;
-        });
-
-        if (!sceneObject) {
-            return "You don't see that here.";
-        }
-
-        const interaction = sceneObject.interactions?.['examine'];
-        if (interaction) {
-            return handleInteraction(interaction, state);
-        }
-
-        return sceneObject.descriptions.default;
+        return result;
     }
 }

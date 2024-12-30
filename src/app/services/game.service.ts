@@ -1,10 +1,10 @@
 import { Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
 import { GameStateService } from './game-state.service';
 import { SceneService } from './scene.service';
 import { CommandService } from './commands/command.service';
-import { UIService } from './ui.service';
-import { Scene } from '../models/game-state.model';
+import { SaveLoadService } from './save-load.service';
+import { GameTextService } from './game-text.service';
+import { ProgressMechanicsService } from './mechanics/progress-mechanics.service';
 
 @Injectable({
     providedIn: 'root'
@@ -14,51 +14,61 @@ export class GameService {
         private gameState: GameStateService,
         private sceneService: SceneService,
         private commandService: CommandService,
-        private uiService: UIService
+        private saveLoad: SaveLoadService,
+        private gameText: GameTextService,
+        private progress: ProgressMechanicsService
     ) {}
 
-    initializeGame(): void {
-        // Initialize game state with starting scene
-        this.gameState.initializeState('westOfHouse');
-
-        // Set initial scene
-        const scene = this.getCurrentScene();
-        if (!scene) {
-            throw new Error('No initial scene found');
+    startNewGame() {
+        const startScene = this.sceneService.getStartScene();
+        if (!startScene) {
+            throw new Error('No start scene defined');
         }
 
-        // Display initial scene description
-        const description = this.sceneService.getSceneDescription(scene);
-        this.uiService.appendToGameText(description);
-        this.uiService.updateSidebar();
+        this.gameState.initializeState(startScene.id);
+        this.gameText.clearGameText();
+        this.gameText.addText(startScene.descriptions.default);
     }
 
-    getCurrentScene(): Scene | null {
-        return this.sceneService.getCurrentScene();
+    loadGame(): boolean {
+        const success = this.saveLoad.loadGame();
+        if (success) {
+            const state = this.gameState.getCurrentState();
+            const scene = this.sceneService.getScene(state.currentScene);
+            if (scene) {
+                this.gameText.addText(scene.descriptions.default);
+            }
+        }
+        return success;
     }
 
-    processCommand(input: string): void {
-        // Process the command
-        const response = this.commandService.processCommand(input);
+    saveGame() {
+        this.saveLoad.saveGame();
+    }
 
-        // Update UI
-        this.uiService.appendToGameText(`> ${input}`);
-        this.uiService.appendToGameText(response);
-        this.uiService.updateSidebar();
+    hasSavedGame(): boolean {
+        return this.saveLoad.hasSavedGame();
+    }
 
-        // Check game state
+    processCommand(input: string) {
         const state = this.gameState.getCurrentState();
         if (state.gameOver) {
-            this.handleGameOver(state.gameWon);
+            this.gameText.addText('The game is over. Start a new game or load a saved game.');
+            return;
+        }
+
+        this.progress.incrementMoves();
+        const result = this.commandService.processInput(input);
+        if (result.message) {
+            this.gameText.addText(result.message);
+        }
+        
+        if (result.success && result.incrementTurn) {
+            this.progress.incrementTurns();
         }
     }
 
-    private handleGameOver(won: boolean): void {
-        const message = won ? 
-            "Congratulations! You've won the game!" : 
-            "Game Over. Better luck next time!";
-        
-        this.uiService.appendToGameText(message);
-        this.uiService.appendToGameText(`Final Score: ${this.gameState.getCurrentState().score}`);
+    getGameText() {
+        return this.gameText.getGameText();
     }
 }

@@ -1,7 +1,11 @@
 import { Injectable } from '@angular/core';
-import { Command } from '../../models/command.model';
-import { SceneService } from '../scene.service';
+import { GameCommand } from '../../models/game-state.model';
 import { GameStateService } from '../game-state.service';
+import { SceneService } from '../scene.service';
+import { ContainerMechanicsService } from '../mechanics/container-mechanics.service';
+import { StateMechanicsService } from '../mechanics/state-mechanics.service';
+import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
+import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
 import { BaseObjectCommandService } from './base-object-command.service';
 
 @Injectable({
@@ -9,35 +13,64 @@ import { BaseObjectCommandService } from './base-object-command.service';
 })
 export class OpenCloseCommandService extends BaseObjectCommandService {
     constructor(
+        gameState: GameStateService,
         sceneService: SceneService,
-        gameState: GameStateService
+        stateMechanics: StateMechanicsService,
+        flagMechanics: FlagMechanicsService,
+        progress: ProgressMechanicsService,
+        private containerMechanics: ContainerMechanicsService
     ) {
-        super(sceneService, gameState);
+        super(gameState, sceneService, stateMechanics, flagMechanics, progress);
     }
 
-    processCommand(command: Command): string {
-        if (!command.object) {
-            return `What do you want to ${command.verb}?`;
+    canHandle(command: GameCommand): boolean {
+        return command.verb === 'open' || command.verb === 'close';
+    }
+
+    handle(command: GameCommand): { success: boolean; message: string; incrementTurn: boolean } {
+        const result = this.handleObjectCommand(command);
+        if (!result.success) {
+            return result;
         }
 
-        const { object, state } = this.findObject(command.object);
-
+        const object = this.findObject(command.object!);
         if (!object) {
-            return `I don't see any ${command.object} here.`;
+            return {
+                success: false,
+                message: `You don't see any ${command.object} here.`,
+                incrementTurn: false
+            };
         }
 
-        // Add to known objects
-        state.knownObjects.add(object.id);
-
-        const verb = command.verb === 'unlock' ? 'open' : 
-                    command.verb === 'shut' ? 'close' : 
-                    command.verb;
-
-        // Check for specific open/close interaction
-        if (object.interactions?.[verb]) {
-            return this.handleObjectInteraction(object, verb, state);
+        // Handle container operations
+        if (command.verb === 'open') {
+            const containerResult = this.containerMechanics.openContainer(object);
+            if (containerResult.success) {
+                return {
+                    success: true,
+                    message: containerResult.message,
+                    incrementTurn: true
+                };
+            }
+            return {
+                success: false,
+                message: containerResult.message,
+                incrementTurn: false
+            };
+        } else {
+            const containerResult = this.containerMechanics.closeContainer(object);
+            if (containerResult.success) {
+                return {
+                    success: true,
+                    message: containerResult.message,
+                    incrementTurn: true
+                };
+            }
+            return {
+                success: false,
+                message: containerResult.message,
+                incrementTurn: false
+            };
         }
-
-        return `You can't ${verb} the ${object.name}.`;
     }
 }

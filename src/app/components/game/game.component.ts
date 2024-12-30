@@ -1,146 +1,81 @@
 import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
 import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
-import { GameService } from '../../services/game.service';
-import { UIService } from '../../services/ui.service';
-import { GameStateService } from '../../services/game-state.service';
 import { GameOutputComponent } from './game-output/game-output.component';
+import { GameStateService } from '../../services/game-state.service';
+import { CommandService } from '../../services/commands/command.service';
+import { SceneService } from '../../services/scene.service';
 
 @Component({
     selector: 'app-game',
     standalone: true,
     imports: [CommonModule, FormsModule, GameOutputComponent],
-    template: `
-        <div class="game-container">
-            <div class="game-main">
-                <app-game-output [gameText]="(gameText$ | async) || []"></app-game-output>
-            </div>
-            <div class="game-sidebar">
-                <div class="sidebar-content" *ngIf="sidebar$ | async as sidebar">
-                    <div class="score">Score: {{ sidebar.score }}</div>
-                    <div class="moves">Moves: {{ sidebar.moves }}</div>
-                    <div class="exits">{{ sidebar.exits }}</div>
-                    <div class="objects">{{ sidebar.objects }}</div>
-                </div>
-                <div class="game-input">
-                    <input [(ngModel)]="userInput" 
-                           (keyup.enter)="onSubmit()"
-                           placeholder="What do you want to do?"
-                           #inputField>
-                </div>
-            </div>
-        </div>
-    `,
-    styles: [`
-        :host {
-            display: block;
-            height: 80vh;
-            margin: 20px;
-        }
-
-        .game-container {
-            display: grid;
-            grid-template-columns: 1fr 300px;
-            gap: 20px;
-            height: 100%;
-            font-family: monospace;
-        }
-
-        .game-main {
-            min-width: 0;
-            height: 100%;
-        }
-        
-        .game-sidebar {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            min-width: 0;
-            width: 100%;
-        }
-
-        .game-input {
-            background: #2d2d2d;
-            padding: 10px;
-            border-radius: 4px;
-        }
-
-        .game-input input {
-            width: 100%;
-            padding: 8px;
-            font-family: monospace;
-            background: #1e1e1e;
-            border: 1px solid #3d3d3d;
-            color: #d4d4d4;
-            border-radius: 2px;
-        }
-
-        .game-input input:focus {
-            outline: none;
-            border-color: #0078d4;
-        }
-
-        .sidebar-content {
-            padding: 10px;
-            border: 1px solid #3d3d3d;
-            background: #1e1e1e;
-            color: #d4d4d4;
-            border-radius: 4px;
-        }
-    `]
+    templateUrl: './game.component.html',
+    styleUrls: ['./game.component.scss']
 })
 export class GameComponent implements OnInit {
-    @ViewChild('inputField') private inputField!: ElementRef;
-    
-    userInput: string = '';
+    @ViewChild('inputField') inputField!: ElementRef;
+
     gameText$: Observable<string[]>;
-    sidebar$: Observable<{
-        commands: string;
-        objects: string;
-        score: number;
-        moves: number;
-        exits: string;
-    }>;
+    sidebar$: Observable<any>;
+    userInput = '';
+    suggestions: string[] = [];
+    showSuggestions = false;
+    commandHistory: string[] = [];
+    currentHistoryIndex = -1;
 
     constructor(
-        private route: ActivatedRoute,
-        private router: Router,
-        private gameService: GameService,
         private gameState: GameStateService,
-        private uiService: UIService
+        private commandService: CommandService,
+        private sceneService: SceneService
     ) {
-        this.gameText$ = this.uiService.gameText$;
-        this.sidebar$ = this.uiService.sidebar$;
+        this.gameText$ = this.gameState.getGameText();
+        this.sidebar$ = this.sceneService.getSidebarInfo();
     }
 
     ngOnInit() {
-        // Check if we have a game state
-        const state = this.gameState.getCurrentState();
-        if (!state || !state.currentScene) {
-            // If not, initialize the game
-            this.gameService.initializeGame();
-        } else {
-            // If we have a state, update the UI
-            const scene = this.gameService.getCurrentScene();
-            if (scene) {
-                this.uiService.appendToGameText(scene.descriptions.default);
-                this.uiService.updateSidebar();
-            }
-        }
+        this.sceneService.initializeGame();
     }
 
     onSubmit() {
         if (!this.userInput.trim()) return;
-        
-        this.gameService.processCommand(this.userInput);
+
+        this.commandHistory.unshift(this.userInput);
+        this.currentHistoryIndex = -1;
+        const response = this.commandService.processInput(this.userInput);
+        this.gameState.addText(response);
         this.userInput = '';
-        
-        // Focus back on input field
-        if (this.inputField) {
-            this.inputField.nativeElement.focus();
+        this.showSuggestions = false;
+    }
+
+    onKeyDown(event: KeyboardEvent) {
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (this.currentHistoryIndex < this.commandHistory.length - 1) {
+                this.currentHistoryIndex++;
+                this.userInput = this.commandHistory[this.currentHistoryIndex];
+            }
+        } else if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            if (this.currentHistoryIndex > 0) {
+                this.currentHistoryIndex--;
+                this.userInput = this.commandHistory[this.currentHistoryIndex];
+            } else if (this.currentHistoryIndex === 0) {
+                this.currentHistoryIndex = -1;
+                this.userInput = '';
+            }
+        } else if (event.key === 'Tab') {
+            event.preventDefault();
+            if (this.suggestions.length > 0) {
+                this.userInput = this.suggestions[0];
+                this.showSuggestions = false;
+            }
         }
+    }
+
+    onInput() {
+        this.suggestions = this.commandService.getSuggestions(this.userInput);
+        this.showSuggestions = this.suggestions.length > 0;
     }
 }

@@ -1,68 +1,61 @@
 import { Injectable } from '@angular/core';
-import { Command } from '../../models/command.model';
 import { GameStateService } from '../game-state.service';
 import { SceneService } from '../scene.service';
-import { CommandHandler } from './command-handler.interface';
-import { Scene, SceneExit } from '../../models/game-state.model';
-
-type Direction = 'north' | 'south' | 'east' | 'west';
-type DirectionAlias = 'n' | 's' | 'e' | 'w';
+import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
+import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
+import { GameCommand } from '../../models/game-state.model';
 
 @Injectable({
     providedIn: 'root'
 })
-export class MovementCommandService implements CommandHandler {
-    private readonly directionMap: Record<DirectionAlias, Direction> = {
-        'n': 'north',
-        's': 'south',
-        'e': 'east',
-        'w': 'west'
-    };
-
+export class MovementCommandService {
     constructor(
         private gameState: GameStateService,
-        private sceneService: SceneService
+        private sceneService: SceneService,
+        private flagMechanics: FlagMechanicsService,
+        private progressMechanics: ProgressMechanicsService
     ) {}
 
-    canHandle(command: Command): boolean {
-        return Object.keys(this.directionMap).includes(command.verb) || ['go', 'north', 'south', 'east', 'west'].includes(command.verb);
-    }
-
-    handle(command: Command): string {
-        return this.processCommand(command);
-    }
-
-    processCommand(command: Command): string {
-        const direction = this.directionMap[command.verb as DirectionAlias] || command.verb as Direction;
-        const scene = this.sceneService.getCurrentScene();
-        
-        if (!scene) {
-            return "Error: No current scene";
+    handle(command: GameCommand): { success: boolean; message: string; incrementTurn: boolean } {
+        const currentScene = this.sceneService.getCurrentScene();
+        if (!currentScene) {
+            return { success: false, message: "You can't go that way.", incrementTurn: false };
         }
 
-        // Check if the direction exists
-        const exit = (scene.exits || []).find((e: SceneExit) => e.direction === direction);
+        const direction = command.verb;
+        const exit = currentScene.exits?.find(e => e.direction === direction);
+
         if (!exit) {
-            return "You can't go that way.";
+            return { success: false, message: "You can't go that way.", incrementTurn: false };
         }
 
-        // Check if the exit has required flags
-        if (exit.requiredFlags && exit.requiredFlags.length > 0) {
-            const state = this.gameState.getCurrentState();
-            const hasAllFlags = exit.requiredFlags.every(flag => state.flags[flag]);
-            if (!hasAllFlags) {
-                return exit.failureMessage || "You can't go that way.";
-            }
+        // Check required flags
+        if (exit.requiredFlags && !this.flagMechanics.checkFlags(exit.requiredFlags)) {
+            return { 
+                success: false, 
+                message: exit.failureMessage || "You can't go that way.", 
+                incrementTurn: false 
+            };
         }
 
-        // Move to the new scene
+        // Handle score for first time visiting
+        if (exit.score && !this.flagMechanics.hasFlag(`visited_${exit.targetScene}`)) {
+            this.progressMechanics.addScore(exit.score);
+            this.flagMechanics.setFlag(`visited_${exit.targetScene}`);
+        }
+
+        // Move to new scene
         this.gameState.setCurrentScene(exit.targetScene);
-        const newScene = this.sceneService.getCurrentScene();
-        
+        const newScene = this.sceneService.getScene(exit.targetScene);
+
         if (!newScene) {
-            return "Error: Invalid scene";
+            return { success: false, message: "Error: Scene not found.", incrementTurn: false };
         }
 
-        return this.sceneService.getSceneDescription(newScene);
+        return {
+            success: true,
+            message: this.sceneService.getSceneDescription(newScene),
+            incrementTurn: true
+        };
     }
 }

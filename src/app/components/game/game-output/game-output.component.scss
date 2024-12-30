@@ -1,0 +1,28 @@
+:host {
+    display: block;
+    height: 80dvh;
+    min-height: 0;
+    overflow: hidden; // Prevent double scrollbars
+    margin-bottom: var(--spacing-md);
+}
+
+.game-text {
+    height: 100%;
+    padding: var(--spacing-sm);
+    padding-bottom: var(--spacing-xl); // Add extra padding at the bottom
+    font-size: 0.8rem;
+    line-height: 1.5;
+    overflow-y: auto; // Enable vertical scrolling
+    overflow-x: hidden; // Hide horizontal scrollbar
+    display: flex;
+    flex-direction: column;
+}
+
+.game-text-line {
+    margin-bottom: var(--spacing-sm);
+    white-space: pre-wrap;
+    
+    &:last-child {
+        margin-bottom: var(--spacing-md); // Add extra space after last line
+    }
+}

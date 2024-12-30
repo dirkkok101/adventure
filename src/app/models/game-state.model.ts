@@ -5,23 +5,30 @@ export interface GameState {
     score: number;
     moves: number;
     knownObjects: Set<string>;
+    containers: { [key: string]: string[] }; // Maps container IDs to their contents
     gameOver: boolean;
     gameWon: boolean;
+    maxScore: number; // Track maximum possible score
+    turns: number; // Track number of turns for time-based events
+    light: boolean; // Global light state
 }
 
 export interface Scene {
     id: string;
     name: string;
     region: string;
-    light?: boolean;
+    light?: boolean; // Whether the scene has natural light
+    visited?: boolean; // Whether the scene has been visited before
     descriptions: {
         default: string;
         dark?: string;
+        visited?: string; // Description for when you've been here before
         states?: { [key: string]: string };
     };
     objects?: { [key: string]: SceneObject };
     exits?: SceneExit[];
     onEnter?: SceneInteraction;
+    onExit?: SceneInteraction;
 }
 
 export interface SceneObject {
@@ -30,6 +37,7 @@ export interface SceneObject {
     descriptions: {
         default: string;
         empty?: string;
+        contents?: string; // For containers, how to list contents
         states?: { [key: string]: string };
     };
     visibleOnEntry?: boolean;
@@ -37,8 +45,12 @@ export interface SceneObject {
     usable?: boolean;
     weight?: number;
     isContainer?: boolean;
+    isOpen?: boolean; // Whether container is open
+    isLocked?: boolean; // Whether container is locked
     capacity?: number;
     contents?: string[];
+    isTreasure?: boolean; // Whether this is a treasure for trophy case
+    providesLight?: boolean; // Whether object provides light when on
     interactions?: { [key: string]: SceneInteraction };
 }
 
@@ -48,6 +60,8 @@ export interface SceneExit {
     description: string;
     requiredFlags?: string[];
     failureMessage?: string;
+    score?: number; // Score for discovering new areas
+    oneWay?: boolean; // Whether you can return this way
 }
 
 export interface SceneInteraction {
@@ -59,6 +73,19 @@ export interface SceneInteraction {
     failureMessage?: string;
     revealsObjects?: string[];
     score?: number;
+    addToInventory?: string[]; // Items to add to inventory
+    removeFromInventory?: string[]; // Items to remove from inventory
+    addToContainer?: { // Items to add to containers
+        containerId: string;
+        itemIds: string[];
+    };
+    removeFromContainer?: { // Items to remove from containers
+        containerId: string;
+        itemIds: string[];
+    };
+    turnsToComplete?: number; // How many turns this action takes
+    requiresLight?: boolean; // Whether this action needs light
+    providesLight?: boolean; // Whether this action provides light
 }
 
 export interface GameCommand {
@@ -67,4 +94,5 @@ export interface GameCommand {
     target?: string;
     preposition?: string;
     originalInput: string;
+    indirect?: string; // For commands like "put X in Y", Y is indirect
 }

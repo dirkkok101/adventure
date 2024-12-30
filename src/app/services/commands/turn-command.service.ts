@@ -8,7 +8,7 @@ import { StateMechanicsService } from '../mechanics/state-mechanics.service';
 @Injectable({
     providedIn: 'root'
 })
-export class ReadCommandService implements CommandHandler {
+export class TurnCommandService implements CommandHandler {
     constructor(
         private gameState: GameStateService,
         private sceneService: SceneService,
@@ -17,25 +17,25 @@ export class ReadCommandService implements CommandHandler {
     ) {}
 
     canHandle(command: string): boolean {
-        return command.toLowerCase().startsWith('read ');
+        return command.toLowerCase().startsWith('turn ');
     }
 
     handle(command: string): string {
         const words = command.toLowerCase().split(' ');
-        const objectName = words.slice(1).join(' ');
+        if (words.length < 3) {
+            return 'Turn what on or off?';
+        }
 
-        if (!objectName) {
-            return 'What do you want to read?';
+        const action = words[words.length - 1];
+        const objectName = words.slice(1, -1).join(' ');
+
+        if (!['on', 'off'].includes(action)) {
+            return `You can only turn things on or off.`;
         }
 
         const scene = this.sceneService.getCurrentScene();
         if (!scene) {
             return 'Error: No current scene';
-        }
-
-        // Check light
-        if (!this.lightMechanics.isLightPresent()) {
-            return 'It is too dark to read anything.';
         }
 
         // Find object in scene or inventory
@@ -49,12 +49,25 @@ export class ReadCommandService implements CommandHandler {
             return `You don't see any ${objectName} here.`;
         }
 
-        // Handle readable objects
-        const stateResult = this.stateMechanics.handleInteraction(object, 'read');
+        // Handle light sources
+        if (object.providesLight) {
+            const result = this.lightMechanics.handleLightSource(object.id, action === 'on');
+            if (result.success) {
+                const stateResult = this.stateMechanics.handleInteraction(object, `turn_${action}`);
+                if (stateResult.success) {
+                    return stateResult.message;
+                }
+                return result.message;
+            }
+            return result.message;
+        }
+
+        // Handle other devices
+        const stateResult = this.stateMechanics.handleInteraction(object, `turn_${action}`);
         if (stateResult.success) {
             return stateResult.message;
         }
 
-        return `There's nothing to read on the ${object.name}.`;
+        return `You can't turn that ${action}.`;
     }
 }

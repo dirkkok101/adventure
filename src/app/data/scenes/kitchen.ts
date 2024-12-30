@@ -8,8 +8,9 @@ export const kitchen: Scene = {
     descriptions: {
         default: 'You are in the kitchen of the white house. A table seems to have been used recently for the preparation of food. A passage leads to the west and a dark staircase can be seen leading upward. A window looks out onto the front yard. On the table is an elongated brown sack, smelling of hot peppers.',
         states: {
-            'tableEmpty': 'You are in the kitchen of the white house. A table seems to have been used recently for the preparation of food. A passage leads to the west and a dark staircase can be seen leading upward. A window looks out onto the front yard.',
-            'windowOpen': 'You are in the kitchen of the white house. A table seems to have been used recently for the preparation of food. A passage leads to the west and a dark staircase can be seen leading upward. The window is open, letting in a fresh breeze.'
+            'hasSack': 'You are in the kitchen of the white house. A table seems to have been used recently for the preparation of food. A passage leads to the west and a dark staircase can be seen leading upward. A window looks out onto the front yard.',
+            'windowOpen': 'You are in the kitchen of the white house. A table seems to have been used recently for the preparation of food. A passage leads to the west and a dark staircase can be seen leading upward. The window is open, letting in a fresh breeze.',
+            'hasSack,windowOpen': 'You are in the kitchen of the white house. A table seems to have been used recently for the preparation of food. A passage leads to the west and a dark staircase can be seen leading upward. The window is open, letting in a fresh breeze.'
         }
     },
     objects: {
@@ -52,17 +53,18 @@ export const kitchen: Scene = {
             descriptions: {
                 default: 'The table seems to have been used recently for the preparation of food. On it you can see a bottle of water and a clove of garlic.',
                 states: {
-                    'tableEmpty': 'The table is empty.'
+                    'hasWater,hasGarlic': 'The table seems to have been used recently for the preparation of food.',
+                    'hasWater,!hasGarlic': 'The table seems to have been used recently for the preparation of food. On it you can see a clove of garlic.',
+                    '!hasWater,hasGarlic': 'The table seems to have been used recently for the preparation of food. On it you can see a bottle of water.',
                 }
             },
             interactions: {
                 examine: {
                     message: 'The table seems to have been used recently for the preparation of food. On it you can see a bottle of water and a clove of garlic.',
                     states: {
-                        'tableEmpty': 'The table is empty.',
+                        'hasWater,hasGarlic': 'The table seems to have been used recently for the preparation of food.',
                         'hasWater,!hasGarlic': 'The table seems to have been used recently for the preparation of food. On it you can see a clove of garlic.',
                         '!hasWater,hasGarlic': 'The table seems to have been used recently for the preparation of food. On it you can see a bottle of water.',
-                        'hasWater,hasGarlic': 'The table is empty.'
                     }
                 }
             }

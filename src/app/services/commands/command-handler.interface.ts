@@ -1,5 +1,4 @@
-import { Command } from '../../models/command.model';
-
 export interface CommandHandler {
-    processCommand(command: Command): string;
+    canHandle(command: string): boolean;
+    handle(command: string): string;
 }
