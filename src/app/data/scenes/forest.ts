@@ -36,8 +36,13 @@ export const forest: Scene = {
         },
         {
             direction: 'south',
-            targetScene: 'south_of_house',
+            targetScene: 'southOfHouse',
             description: 'You can see the house to the south.'
+        },
+        {
+            direction: 'east',
+            targetScene: 'westOfHouse',
+            description: 'The white house is visible to the east.'
         }
     ]
 };

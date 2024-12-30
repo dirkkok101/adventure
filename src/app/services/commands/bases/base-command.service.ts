@@ -100,10 +100,23 @@ export abstract class BaseCommandService implements ICommandService {
 
         // Then check scene
         const objects = scene.objects || {};
-        for (const obj of Object.values(objects)) {
-            if (obj.name.toLowerCase() === objectName.toLowerCase() && 
-                await this.checkVisibility(obj)) {
-                return obj;
+        const sceneObjects = Object.values(objects);
+        
+        // Find matching objects
+        for (const obj of sceneObjects) {
+            if (obj.name.toLowerCase() === objectName.toLowerCase()) {
+                // If the object is directly visible or in inventory
+                if (await this.checkVisibility(obj)) {
+                    return obj;
+                }
+                
+                // If the object is in a visible, open container
+                const container = this.containerMechanics.findContainerWithItem(obj.id);
+                if (container && 
+                    await this.checkVisibility(container) && 
+                    this.containerMechanics.isOpen(container.id)) {
+                    return obj;
+                }
             }
         }
 

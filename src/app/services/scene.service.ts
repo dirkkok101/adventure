@@ -33,11 +33,33 @@ export class SceneService {
     }
 
     /**
-     * Get a scene by ID
+     * Get a scene by ID with its current state
      * @param id Scene ID to retrieve
      */
     getScene(id: string): Scene | null {
-        return this.scenes[id] || null;
+        const baseScene = this.scenes[id];
+        if (!baseScene) return null;
+
+        const state = this.gameState.getCurrentState();
+        const sceneState = state.sceneState[id];
+
+        // Return scene with current state
+        return {
+            ...baseScene,
+            visited: sceneState?.visited ?? false,
+            objects: baseScene.objects ? Object.entries(baseScene.objects).reduce((acc, [objId, obj]) => {
+                const objState = sceneState?.objects?.[objId];
+                return {
+                    ...acc,
+                    [objId]: {
+                        ...obj,
+                        isOpen: objState?.isOpen ?? obj.isOpen,
+                        isLocked: objState?.isLocked ?? obj.isLocked,
+                        visibleOnEntry: objState?.isRevealed ?? obj.visibleOnEntry
+                    }
+                };
+            }, {}) : undefined
+        };
     }
 
     /**
@@ -62,6 +84,7 @@ export class SceneService {
 
         // Get description based on state flags
         if (scene.descriptions.states) {
+            // Check each state description
             for (const [flagCombo, desc] of Object.entries(scene.descriptions.states)) {
                 const flags = flagCombo.split(',');
                 const matches = flags.every(flag => {
@@ -144,5 +167,62 @@ export class SceneService {
         return Object.values(scene.objects).find(obj => 
             obj.name.toLowerCase().includes(objectName.toLowerCase())
         ) || null;
+    }
+
+    /**
+     * Find an object by its ID in any scene
+     * @param objectId ID of the object to find
+     */
+    findObjectById(objectId: string): SceneObject | null {
+        // Search all scenes for the object
+        for (const scene of Object.values(this.scenes)) {
+            if (scene.objects?.[objectId]) {
+                return scene.objects[objectId];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Mark a scene as visited and update its state
+     * @param sceneId ID of scene to mark as visited
+     */
+    markSceneVisited(sceneId: string) {
+        this.gameState.updateState(state => ({
+            ...state,
+            sceneState: {
+                ...state.sceneState,
+                [sceneId]: {
+                    ...state.sceneState[sceneId],
+                    visited: true,
+                    objects: state.sceneState[sceneId]?.objects ?? {}
+                }
+            }
+        }));
+    }
+
+    /**
+     * Update an object's state in a scene
+     * @param sceneId ID of the scene containing the object
+     * @param objectId ID of the object to update
+     * @param updates Updates to apply to the object
+     */
+    updateObjectState(sceneId: string, objectId: string, updates: { isOpen?: boolean; isLocked?: boolean; isRevealed?: boolean }) {
+        this.gameState.updateState(state => ({
+            ...state,
+            sceneState: {
+                ...state.sceneState,
+                [sceneId]: {
+                    ...state.sceneState[sceneId],
+                    objects: {
+                        ...state.sceneState[sceneId]?.objects,
+                        [objectId]: {
+                            ...state.sceneState[sceneId]?.objects?.[objectId],
+                            ...updates
+                        }
+                    }
+                }
+            }
+        }));
     }
 }

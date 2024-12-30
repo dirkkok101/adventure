@@ -34,6 +34,18 @@ export class FlagMechanicsService {
 
     checkFlags(flags: string[]): boolean {
         return flags.every(flag => {
+            // Check for OR condition
+            if (flag.includes('|')) {
+                const orFlags = flag.split('|');
+                return orFlags.some(orFlag => {
+                    if (orFlag.startsWith('!')) {
+                        return !this.hasFlag(orFlag.substring(1));
+                    }
+                    return this.hasFlag(orFlag);
+                });
+            }
+
+            // Regular NOT or flag check
             if (flag.startsWith('!')) {
                 return !this.hasFlag(flag.substring(1));
             }
@@ -43,7 +55,7 @@ export class FlagMechanicsService {
 
     // Common flag operations
     setContainerOpen(containerId: string, isOpen: boolean): void {
-        const flag = `${containerId}_open`;
+        const flag = `${containerId}Open`;
         if (isOpen) {
             this.setFlag(flag);
         } else {
@@ -52,15 +64,18 @@ export class FlagMechanicsService {
     }
 
     isContainerOpen(containerId: string): boolean {
-        return this.hasFlag(`${containerId}_open`);
+        return this.hasFlag(`${containerId}Open`);
     }
 
     setObjectRevealed(objectId: string): void {
-        this.setFlag(`revealed_${objectId}`);
+        this.gameState.updateState(state => ({
+            ...state,
+            knownObjects: new Set([...state.knownObjects, objectId])
+        }));
     }
 
     isObjectRevealed(objectId: string): boolean {
-        return this.hasFlag(`revealed_${objectId}`);
+        return this.gameState.getCurrentState().knownObjects.has(objectId);
     }
 
     // Light-related flags

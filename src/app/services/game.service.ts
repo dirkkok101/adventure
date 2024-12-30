@@ -95,7 +95,7 @@ export class GameService {
                 const state = this.gameState.getCurrentState();
                 const scene = this.sceneService.getScene(state.currentScene);
                 if (scene) {
-                    this.gameText.addText(scene.descriptions.default);
+                    this.gameText.addText(this.sceneService.getSceneDescription(scene));
                 }
             }
             return success;

@@ -37,12 +37,15 @@ export class StateMechanicsService {
                 };
             }
 
-            // Check required flags
-            if (interaction.requiredFlags && !await this.checkRequiredFlags(interaction.requiredFlags)) {
-                return { 
-                    success: false, 
-                    message: interaction.failureMessage || this.gameText.get('error.actionNotAllowed')
-                };
+            // Check required flags if they exist and are not empty
+            const requiredFlags = interaction.requiredFlags;
+            if (requiredFlags && requiredFlags.length > 0) {
+                if (!await this.checkRequiredFlags(requiredFlags)) {
+                    return { 
+                        success: false, 
+                        message: interaction.failureMessage || this.gameText.get('error.actionNotAllowed')
+                    };
+                }
             }
 
             // Check if light is required and present
@@ -97,6 +100,27 @@ export class StateMechanicsService {
             // Handle scoring
             if (interaction.score) {
                 await this.scoreMechanics.addScore(interaction.score);
+            }
+
+            // Handle object reveals
+            if (interaction.revealsObjects) {
+                for (const objectId of interaction.revealsObjects) {
+                    // Add to knownObjects to make it visible
+                    this.gameState.updateState(state => ({
+                        ...state,
+                        knownObjects: new Set([...state.knownObjects, objectId])
+                    }));
+
+                    // Update scene state for revealed object
+                    const scene = this.sceneService.getCurrentScene();
+                    if (scene) {
+                        this.sceneService.updateObjectState(scene.id, objectId, { isRevealed: true });
+                        // If the interaction target is a container, add the revealed object to it
+                        if (object?.isContainer) {
+                            await this.containerMechanics.addToContainer(object.id, objectId);
+                        }
+                    }
+                }
             }
 
             // Handle light changes
@@ -171,37 +195,33 @@ export class StateMechanicsService {
                 }
             }
 
+            // Handle object reveals
+            if (interaction.revealsObjects) {
+                for (const objectId of interaction.revealsObjects) {
+                    // Add to knownObjects to make it visible
+                    this.gameState.updateState(state => ({
+                        ...state,
+                        knownObjects: new Set([...state.knownObjects, objectId])
+                    }));
+
+                    // Update scene state for revealed object
+                    const scene = this.sceneService.getCurrentScene();
+                    if (scene && scene.objects) {
+                        this.sceneService.updateObjectState(scene.id, objectId, { isRevealed: true });
+                        // If this is a container interaction, add the revealed object to the container
+                        if (interaction.addToContainer) {
+                            await this.containerMechanics.addToContainer(interaction.addToContainer.containerId, objectId);
+                        }
+                    }
+                }
+            }
+
             // Handle container changes
             if (interaction.addToContainer) {
                 const { containerId, itemIds } = interaction.addToContainer;
                 for (const itemId of itemIds) {
-                    const result = await this.containerMechanics.addToContainer(containerId, itemId);
-                    if (!result.success) {
-                        return result;
-                    }
+                    await this.containerMechanics.addToContainer(containerId, itemId);
                 }
-            }
-
-            if (interaction.removeFromContainer) {
-                const { containerId, itemIds } = interaction.removeFromContainer;
-                for (const itemId of itemIds) {
-                    const result = await this.containerMechanics.removeFromContainer(containerId, itemId);
-                    if (!result.success) {
-                        return result;
-                    }
-                }
-            }
-
-            // Handle object reveals
-            if (interaction.revealsObjects) {
-                for (const objectId of interaction.revealsObjects) {
-                    this.flagMechanics.setObjectRevealed(objectId);
-                }
-            }
-
-            // Handle scoring
-            if (interaction.score) {
-                await this.scoreMechanics.addScore(interaction.score);
             }
 
             // Handle light changes
@@ -218,6 +238,11 @@ export class StateMechanicsService {
                 if (!result.success) {
                     return result;
                 }
+            }
+
+            // Handle scoring
+            if (interaction.score) {
+                await this.scoreMechanics.addScore(interaction.score);
             }
 
             // Handle turn progression

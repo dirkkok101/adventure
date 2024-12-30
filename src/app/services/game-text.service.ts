@@ -25,6 +25,7 @@ export class GameTextService {
 
         // Error messages
         'error.itemNotFound': "You don't see any {item} here.",
+        'error.objectNotFound': "You don't see any {item} here.",
         'error.notHoldingItem': "You don't have the {item}.",
         'error.containerNotFound': "You don't see any {container} here.",
         'error.containerFull': "The {container} is full.",
@@ -38,6 +39,8 @@ export class GameTextService {
         'error.cantUse': "You can't use the {item}.",
         'error.tooDark': "It's too dark to see.",
         'error.noEffect': "Nothing happens.",
+        'error.actionNotAllowed': "You can't do that right now.",
+        'error.cantPerformAction': "You can't {action} the {item}.",
 
         // Success messages
         'success.take': "You take the {item}.",

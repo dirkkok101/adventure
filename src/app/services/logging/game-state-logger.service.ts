@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { GameState } from '../../models/game-state.model';
+import { SaveState } from '../save-load.service';
 
 @Injectable({
     providedIn: 'root'
@@ -12,8 +13,14 @@ export class GameStateLoggerService {
             flags: state.flags,
             score: state.score,
             moves: state.moves,
-            knownObjects: Array.from(state.knownObjects)
+            knownObjects: Array.from(state.knownObjects),
+            containers: state.containers
         });
+    }
+
+    logSaveState(message: string, state: SaveState) {
+        console.log(`[SaveState] ${message}:`, 
+            JSON.stringify(state));
     }
 
     logStateUpdate(oldState: GameState, updates: Partial<GameState>) {

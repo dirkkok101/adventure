@@ -19,7 +19,8 @@ export class GameStateService {
     gameOver: false,
     gameWon: false,
     light: false,
-    trophies: []
+    trophies: [],
+    sceneState: {}
   };
 
   private stateSubject = new BehaviorSubject<GameState>(this.state);
@@ -48,7 +49,8 @@ export class GameStateService {
       gameOver: false,
       gameWon: false,
       light: false,
-      trophies: []
+      trophies: [],
+      sceneState: {}
     }));
   }
 

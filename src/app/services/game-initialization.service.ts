@@ -38,7 +38,7 @@ export class GameInitializationService {
 
         // Clear and set initial game text
         this.gameText.clearGameText();
-        this.gameText.addText(startScene.descriptions.default);
+        this.gameText.addText(this.sceneService.getSceneDescription(startScene));
     }
 
     /**

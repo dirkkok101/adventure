@@ -40,7 +40,7 @@ export abstract class BaseObjectCommandService {
         // Check inventory first
         const inventoryItems = this.inventoryMechanics.listInventory();
         for (const itemId of inventoryItems) {
-            const item = await this.sceneService.findObject(itemId);
+            const item = this.sceneService.findObjectById(itemId);
             if (item && item.name.toLowerCase() === objectName.toLowerCase()) {
                 return item;
             }

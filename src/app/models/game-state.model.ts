@@ -12,6 +12,18 @@ export interface GameState {
     turns: number; // Track number of turns for time-based events
     light: boolean; // Global light state
     trophies: string[]; // List of earned trophies/achievements
+    sceneState: { // Track per-scene state
+        [sceneId: string]: {
+            visited: boolean;
+            objects: { // Track object-specific state
+                [objectId: string]: {
+                    isOpen?: boolean;
+                    isLocked?: boolean;
+                    isRevealed?: boolean;
+                }
+            }
+        }
+    };
 }
 
 export interface Scene {

@@ -8,8 +8,8 @@ export const westOfHouse: Scene = {
     descriptions: {
         default: 'You are standing in an open field west of a white house, with a boarded front door. A small window is visible on this side of the house. There is a small mailbox here.',
         states: {
-            'mailboxOpen': 'You are standing in an open field west of a white house, with a boarded front door. A small window is visible on this side of the house. There is a small mailbox here, its door open, revealing a leaflet inside.',
-            'mailboxEmpty': 'You are standing in an open field west of a white house, with a boarded front door. A small window is visible on this side of the house. There is a small mailbox here, its door open and empty.',
+            'mailboxOpen,mailboxEmpty': 'You are standing in an open field west of a white house, with a boarded front door. A small window is visible on this side of the house. There is a small mailbox here, its door open and empty.',
+            'mailboxOpen,!mailboxEmpty': 'You are standing in an open field west of a white house, with a boarded front door. A small window is visible on this side of the house. There is a small mailbox here, its door open, revealing a leaflet inside.',
             'windowOpen': 'You are standing in an open field west of a white house. A window on this side of the house stands open. There is a small mailbox here.'
         }
     },
@@ -119,15 +119,21 @@ export const westOfHouse: Scene = {
             interactions: {
                 examine: {
                     message: 'Welcome to Zork!\n\nZork is a game of adventure, danger, and low cunning. In it you will explore some of the most amazing territory ever seen by mortals.',
-                    requiredFlags: ['mailboxOpen', '!hasLeaflet']
+                    requiredFlags: ['mailboxOpen|hasLeaflet']
                 },
                 read: {
-                    message: 'Welcome to Zork!\n\nZork is a game of adventure, danger, and low cunning. In it you will explore some of the most amazing territory ever seen by mortals.'
+                    message: 'Welcome to Zork!\n\nZork is a game of adventure, danger, and low cunning. In it you will explore some of the most amazing territory ever seen by mortals.',
+                    requiredFlags: ['mailboxOpen|hasLeaflet']
                 },
                 take: {
                     message: 'You take the leaflet from the mailbox.',
                     grantsFlags: ['hasLeaflet', 'mailboxEmpty'],
                     requiredFlags: ['mailboxOpen', '!hasLeaflet'],
+                    addToInventory: ['leaflet'],
+                    removeFromContainer: {
+                        containerId: 'mailbox',
+                        itemIds: ['leaflet']
+                    },
                     score: 5
                 }
             } as { [key: string]: SceneInteraction }

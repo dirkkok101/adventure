@@ -6,7 +6,7 @@ import { GameStateLoggerService } from './logging/game-state-logger.service';
 
 const STORAGE_KEY = 'zork_game_state';
 
-interface SaveState {
+export interface SaveState {
     gameState: Omit<GameState, 'knownObjects'> & {
         knownObjects: string[];
     };
@@ -40,7 +40,8 @@ export class SaveLoadService {
                 gameOver: state.gameOver,
                 gameWon: state.gameWon,
                 light: state.light,
-                trophies: [...state.trophies]
+                trophies: [...state.trophies],
+                sceneState: { ...state.sceneState }
             };
 
             // Get just the text array from the service, not the Observable
@@ -68,10 +69,22 @@ export class SaveLoadService {
             try {
                 const parsedState = JSON.parse(savedState) as SaveState;
                 
-                // Load game state
+                // Load game state with all properties
                 this.gameState.updateState(() => ({
-                    ...parsedState.gameState,
-                    knownObjects: new Set(parsedState.gameState.knownObjects)
+                    currentScene: parsedState.gameState.currentScene,
+                    inventory: { ...parsedState.gameState.inventory },
+                    containers: { ...parsedState.gameState.containers },
+                    flags: { ...parsedState.gameState.flags },
+                    score: parsedState.gameState.score,
+                    maxScore: parsedState.gameState.maxScore,
+                    moves: parsedState.gameState.moves,
+                    turns: parsedState.gameState.turns,
+                    knownObjects: new Set(parsedState.gameState.knownObjects),
+                    gameOver: parsedState.gameState.gameOver,
+                    gameWon: parsedState.gameState.gameWon,
+                    light: parsedState.gameState.light,
+                    trophies: [...parsedState.gameState.trophies],
+                    sceneState: { ...parsedState.gameState.sceneState }
                 }));
 
                 // Load game text
