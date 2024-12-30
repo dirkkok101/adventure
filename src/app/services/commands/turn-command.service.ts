@@ -1,73 +1,94 @@
 import { Injectable } from '@angular/core';
-import { CommandHandler } from './command-handler.interface';
+import { GameCommand, SceneObject } from '../../models/game-state.model';
+import { BaseObjectCommandService } from './base-object-command.service';
 import { GameStateService } from '../game-state.service';
 import { SceneService } from '../scene.service';
 import { LightMechanicsService } from '../mechanics/light-mechanics.service';
 import { StateMechanicsService } from '../mechanics/state-mechanics.service';
+import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
 
 @Injectable({
     providedIn: 'root'
 })
-export class TurnCommandService implements CommandHandler {
+export class TurnCommandService extends BaseObjectCommandService {
     constructor(
-        private gameState: GameStateService,
-        private sceneService: SceneService,
+        gameState: GameStateService,
+        sceneService: SceneService,
         private lightMechanics: LightMechanicsService,
-        private stateMechanics: StateMechanicsService
-    ) {}
-
-    canHandle(command: string): boolean {
-        return command.toLowerCase().startsWith('turn ');
+        private stateMechanics: StateMechanicsService,
+        private inventoryMechanics: InventoryMechanicsService
+    ) {
+        super(gameState, sceneService);
     }
 
-    handle(command: string): string {
-        const words = command.toLowerCase().split(' ');
-        if (words.length < 3) {
-            return 'Turn what on or off?';
+    canHandle(command: GameCommand): boolean {
+        return command.verb === 'turn';
+    }
+
+    async handle(command: GameCommand): Promise<{ success: boolean; message: string; incrementTurn: boolean }> {
+        if (!command.preposition || !command.object) {
+            return {
+                success: false,
+                message: 'Turn what on or off?',
+                incrementTurn: false
+            };
         }
 
-        const action = words[words.length - 1];
-        const objectName = words.slice(1, -1).join(' ');
-
-        if (!['on', 'off'].includes(action)) {
-            return `You can only turn things on or off.`;
+        if (!['on', 'off'].includes(command.preposition)) {
+            return {
+                success: false,
+                message: 'You can only turn things on or off.',
+                incrementTurn: false
+            };
         }
 
-        const scene = this.sceneService.getCurrentScene();
-        if (!scene) {
-            return 'Error: No current scene';
-        }
-
-        // Find object in scene or inventory
-        const state = this.gameState.getCurrentState();
-        const object = Object.values(scene.objects || {}).find(obj => 
-            obj.name.toLowerCase() === objectName && 
-            (this.lightMechanics.isObjectVisible(obj) || state.inventory[obj.id])
-        );
-
+        const object = await this.findObject(command.object);
         if (!object) {
-            return `You don't see any ${objectName} here.`;
+            return {
+                success: false,
+                message: `You don't see any ${command.object} here.`,
+                incrementTurn: false
+            };
         }
 
-        // Handle light sources
-        if (object.providesLight) {
-            const result = this.lightMechanics.handleLightSource(object.id, action === 'on');
-            if (result.success) {
-                const stateResult = this.stateMechanics.handleInteraction(object, `turn_${action}`);
-                if (stateResult.success) {
-                    return stateResult.message;
-                }
-                return result.message;
-            }
-            return result.message;
+        return this.handleInteraction(object, command);
+    }
+
+    protected async handleInteraction(object: SceneObject, command: GameCommand): Promise<{ success: boolean; message: string; incrementTurn: boolean }> {
+        // Check if object can be turned on/off
+        if (!object.canTurnOnOff && !object.interactions?.turn) {
+            return {
+                success: false,
+                message: `You can't turn the ${object.name} on or off.`,
+                incrementTurn: false
+            };
         }
 
-        // Handle other devices
-        const stateResult = this.stateMechanics.handleInteraction(object, `turn_${action}`);
+        // Try state-based interaction first
+        const stateResult = this.stateMechanics.handleInteraction(object, `turn_${command.preposition}`);
         if (stateResult.success) {
-            return stateResult.message;
+            // If this is a light source, update light state
+            if (object.isLightSource) {
+                this.lightMechanics.setLightSourceState(object.id, command.preposition === 'on');
+            }
+            return { ...stateResult, incrementTurn: true };
         }
 
-        return `You can't turn that ${action}.`;
+        // Handle default turn behavior for light sources
+        if (object.isLightSource) {
+            const newState = command.preposition === 'on';
+            this.lightMechanics.setLightSourceState(object.id, newState);
+            return {
+                success: true,
+                message: `You turn the ${object.name} ${command.preposition}.`,
+                incrementTurn: true
+            };
+        }
+
+        return {
+            success: false,
+            message: `Nothing happens when you try to turn the ${object.name} ${command.preposition}.`,
+            incrementTurn: false
+        };
     }
 }

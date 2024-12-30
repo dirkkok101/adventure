@@ -1,60 +1,69 @@
 import { Injectable } from '@angular/core';
-import { CommandHandler } from './command-handler.interface';
+import { GameCommand, SceneObject } from '../../models/game-state.model';
+import { BaseObjectCommandService } from './base-object-command.service';
 import { GameStateService } from '../game-state.service';
 import { SceneService } from '../scene.service';
 import { LightMechanicsService } from '../mechanics/light-mechanics.service';
 import { StateMechanicsService } from '../mechanics/state-mechanics.service';
+import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
 
 @Injectable({
     providedIn: 'root'
 })
-export class ReadCommandService implements CommandHandler {
+export class ReadCommandService extends BaseObjectCommandService {
     constructor(
-        private gameState: GameStateService,
-        private sceneService: SceneService,
+        gameState: GameStateService,
+        sceneService: SceneService,
         private lightMechanics: LightMechanicsService,
-        private stateMechanics: StateMechanicsService
-    ) {}
-
-    canHandle(command: string): boolean {
-        return command.toLowerCase().startsWith('read ');
+        private stateMechanics: StateMechanicsService,
+        private inventoryMechanics: InventoryMechanicsService
+    ) {
+        super(gameState, sceneService);
     }
 
-    handle(command: string): string {
-        const words = command.toLowerCase().split(' ');
-        const objectName = words.slice(1).join(' ');
+    canHandle(command: GameCommand): boolean {
+        return command.verb === 'read';
+    }
 
-        if (!objectName) {
-            return 'What do you want to read?';
-        }
-
-        const scene = this.sceneService.getCurrentScene();
-        if (!scene) {
-            return 'Error: No current scene';
-        }
-
+    protected async handleInteraction(object: SceneObject, command: GameCommand): Promise<{ success: boolean; message: string; incrementTurn: boolean }> {
         // Check light
         if (!this.lightMechanics.isLightPresent()) {
-            return 'It is too dark to read anything.';
+            return {
+                success: false,
+                message: 'It is too dark to read anything.',
+                incrementTurn: false
+            };
         }
 
-        // Find object in scene or inventory
-        const state = this.gameState.getCurrentState();
-        const object = Object.values(scene.objects || {}).find(obj => 
-            obj.name.toLowerCase() === objectName && 
-            (this.lightMechanics.isObjectVisible(obj) || state.inventory[obj.id])
-        );
-
-        if (!object) {
-            return `You don't see any ${objectName} here.`;
+        // Check if object is readable
+        if (!object.canRead && !object.interactions?.read) {
+            return {
+                success: false,
+                message: `There's nothing to read on the ${object.name}.`,
+                incrementTurn: false
+            };
         }
 
-        // Handle readable objects
+        // Try state-based interaction first
         const stateResult = this.stateMechanics.handleInteraction(object, 'read');
         if (stateResult.success) {
-            return stateResult.message;
+            return { ...stateResult, incrementTurn: true };
         }
 
-        return `There's nothing to read on the ${object.name}.`;
+        // If it has readable content but no specific interaction
+        if (object.readableContent) {
+            return {
+                success: true,
+                message: object.readableContent,
+                incrementTurn: true
+            };
+        }
+
+        // Default response
+        return {
+            success: false,
+            message: `You can't make out anything readable on the ${object.name}.`,
+            incrementTurn: false
+        };
     }
 }

@@ -11,6 +11,7 @@ export interface GameState {
     maxScore: number; // Track maximum possible score
     turns: number; // Track number of turns for time-based events
     light: boolean; // Global light state
+    trophies: string[]; // List of earned trophies/achievements
 }
 
 export interface Scene {
@@ -38,6 +39,7 @@ export interface SceneObject {
         default: string;
         empty?: string;
         contents?: string; // For containers, how to list contents
+        examine?: string; // Detailed examination description
         states?: { [key: string]: string };
     };
     visibleOnEntry?: boolean;
@@ -52,6 +54,14 @@ export interface SceneObject {
     isTreasure?: boolean; // Whether this is a treasure for trophy case
     providesLight?: boolean; // Whether object provides light when on
     interactions?: { [key: string]: SceneInteraction };
+    scoring?: {
+        drop?: number; // Score for dropping in the right place
+        take?: number; // Score for taking the object
+        use?: number; // Score for using the object correctly
+        containerTargets?: { // Specific containers that give points when object is placed in them
+            [containerId: string]: number;
+        };
+    };
 }
 
 export interface SceneExit {
@@ -95,4 +105,10 @@ export interface GameCommand {
     preposition?: string;
     originalInput: string;
     indirect?: string; // For commands like "put X in Y", Y is indirect
+}
+
+export interface CommandResponse {
+    success: boolean;
+    message: string;
+    incrementTurn: boolean;
 }

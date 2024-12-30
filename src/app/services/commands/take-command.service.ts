@@ -1,73 +1,75 @@
 import { Injectable } from '@angular/core';
-import { CommandHandler } from './command-handler.interface';
+import { GameCommand, SceneObject } from '../../models/game-state.model';
+import { BaseObjectCommandService } from './base-object-command.service';
 import { GameStateService } from '../game-state.service';
 import { SceneService } from '../scene.service';
 import { LightMechanicsService } from '../mechanics/light-mechanics.service';
 import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
 import { StateMechanicsService } from '../mechanics/state-mechanics.service';
+import { ContainerMechanicsService } from '../mechanics/container-mechanics.service';
 
 @Injectable({
     providedIn: 'root'
 })
-export class TakeCommandService implements CommandHandler {
+export class TakeCommandService extends BaseObjectCommandService {
     constructor(
-        private gameState: GameStateService,
-        private sceneService: SceneService,
+        gameState: GameStateService,
+        sceneService: SceneService,
         private lightMechanics: LightMechanicsService,
         private inventoryMechanics: InventoryMechanicsService,
-        private stateMechanics: StateMechanicsService
-    ) {}
-
-    canHandle(command: string): boolean {
-        return command.toLowerCase().startsWith('take ') || 
-               command.toLowerCase().startsWith('get ') ||
-               command.toLowerCase().startsWith('pick up ');
+        private stateMechanics: StateMechanicsService,
+        private containerMechanics: ContainerMechanicsService
+    ) {
+        super(gameState, sceneService);
     }
 
-    handle(command: string): string {
-        const words = command.toLowerCase().split(' ');
-        const verb = words[0];
-        let objectName = words.slice(1).join(' ');
+    canHandle(command: GameCommand): boolean {
+        return command.verb === 'take' || command.verb === 'get' || command.verb === 'pick';
+    }
 
-        if (verb === 'pick') {
-            objectName = words.slice(2).join(' '); // Skip 'pick up'
-        }
-
-        if (!objectName) {
-            return 'What do you want to take?';
-        }
-
-        const scene = this.sceneService.getCurrentScene();
-        if (!scene) {
-            return 'Error: No current scene';
-        }
-
+    protected async handleInteraction(object: SceneObject, command: GameCommand): Promise<{ success: boolean; message: string; incrementTurn: boolean }> {
         // Check light
         if (!this.lightMechanics.isLightPresent()) {
-            return 'It is too dark to see what you are trying to take.';
+            return {
+                success: false,
+                message: 'It is too dark to see what you are trying to take.',
+                incrementTurn: false
+            };
         }
 
-        // Find object in scene
-        const object = Object.values(scene.objects || {}).find(obj => 
-            obj.name.toLowerCase() === objectName && 
-            this.lightMechanics.isObjectVisible(obj)
-        );
-
-        if (!object) {
-            return 'You don\'t see that here.';
-        }
-
-        // Try to take the object
-        const result = this.inventoryMechanics.takeObject(object);
-        
-        // Handle any state changes from taking the object
-        if (result.success) {
+        // Check if object can be taken
+        if (!this.inventoryMechanics.canTakeObject(object)) {
+            // Try state-based interaction first
             const stateResult = this.stateMechanics.handleInteraction(object, 'take');
             if (stateResult.success) {
-                return stateResult.message;
+                return { ...stateResult, incrementTurn: true };
+            }
+
+            // If no state handling, give generic message
+            return {
+                success: false,
+                message: `You can't take the ${object.name}.`,
+                incrementTurn: false
+            };
+        }
+
+        // Check if it's in a closed container
+        if (object.containerId) {
+            const container = await this.findObject(object.containerId);
+            if (container && !this.containerMechanics.isOpen(container.id)) {
+                return {
+                    success: false,
+                    message: `The ${object.name} is inside the closed ${container.name}.`,
+                    incrementTurn: false
+                };
             }
         }
 
-        return result.message;
+        // Take the object
+        const result = this.inventoryMechanics.takeObject(object);
+        return {
+            ...result,
+            incrementTurn: true
+        };
     }
 }

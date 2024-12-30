@@ -2,17 +2,51 @@ import { Injectable } from '@angular/core';
 import { GameStateService } from '../game-state.service';
 import { SceneService } from '../scene.service';
 import { SceneObject } from '../../models/game-state.model';
+import { distinctUntilChanged, map } from 'rxjs';
+import { FlagMechanicsService } from './flag-mechanics.service';
 
 @Injectable({
     providedIn: 'root'
 })
 export class LightMechanicsService {
+    private readonly LANTERN_BATTERY_LIFE = 100;
+
     constructor(
         private gameState: GameStateService,
-        private sceneService: SceneService
-    ) {}
+        private sceneService: SceneService,
+        private flagMechanics: FlagMechanicsService
+    ) {
+        // Monitor lantern usage
+        this.gameState.state$.pipe(
+            map(state => ({ turns: state.turns, lanternOn: this.flagMechanics.isLightSourceOn('lantern') })),
+            distinctUntilChanged((prev, curr) => 
+                prev.turns === curr.turns && prev.lanternOn === curr.lanternOn
+            )
+        ).subscribe(({ turns, lanternOn }) => {
+            this.handleLanternBattery(turns, lanternOn);
+        });
+    }
 
-    isLightPresent(): boolean {
+    private handleLanternBattery(turns: number, lanternOn: boolean): void {
+        if (!lanternOn) return;
+
+        if (turns >= this.LANTERN_BATTERY_LIFE) {
+            this.flagMechanics.setLightSourceDead('lantern');
+            this.flagMechanics.setLightSource('lantern', false);
+            this.updateLightState();
+        }
+    }
+
+    private updateLightState(): void {
+        const hasLight = this.calculateLightPresence();
+        if (hasLight) {
+            this.flagMechanics.setFlag('hasLight');
+        } else {
+            this.flagMechanics.removeFlag('hasLight');
+        }
+    }
+
+    private calculateLightPresence(): boolean {
         const state = this.gameState.getCurrentState();
         const scene = this.sceneService.getCurrentScene();
 
@@ -25,9 +59,13 @@ export class LightMechanicsService {
         return Object.entries(scene?.objects || {}).some(([id, obj]) => 
             obj.providesLight && 
             state.inventory[id] && 
-            state.flags['lanternOn'] &&
-            !state.flags['lanternDead']
+            this.flagMechanics.isLightSourceOn(id) &&
+            !this.flagMechanics.isLightSourceDead(id)
         );
+    }
+
+    isLightPresent(): boolean {
+        return this.calculateLightPresence();
     }
 
     isObjectVisible(object: SceneObject): boolean {
@@ -44,11 +82,11 @@ export class LightMechanicsService {
         }
 
         // Check if revealed by other actions
-        return Object.entries(state.flags)
-            .some(([flag, isSet]) => 
-                isSet && 
-                (flag === `revealed_${object.id}` || object.descriptions.states?.[flag])
-            );
+        return this.flagMechanics.isObjectRevealed(object.id) || 
+               Object.entries(state.flags)
+                   .some(([flag, isSet]) => 
+                       isSet && object.descriptions.states?.[flag]
+                   );
     }
 
     handleLightSource(sourceId: string, turnOn: boolean): { success: boolean; message: string } {
@@ -61,16 +99,24 @@ export class LightMechanicsService {
         }
 
         if (turnOn) {
-            if (state.flags['lanternDead']) {
-                return { success: false, message: 'The lantern is dead.' };
+            if (this.flagMechanics.isLightSourceDead(sourceId)) {
+                return { success: false, message: `The ${source.name} is dead.` };
             }
-            this.gameState.setFlag('lanternOn');
-            this.gameState.setFlag('hasLight');
-            return { success: true, message: 'The lantern is now on.' };
+            this.flagMechanics.setLightSource(sourceId, true);
+            this.updateLightState();
+            return { success: true, message: `The ${source.name} is now on.` };
         } else {
-            this.gameState.removeFlag('lanternOn');
-            this.gameState.removeFlag('hasLight');
-            return { success: true, message: 'The lantern is now off.' };
+            this.flagMechanics.setLightSource(sourceId, false);
+            this.updateLightState();
+            return { success: true, message: `The ${source.name} is now off.` };
         }
+    }
+
+    getLanternBatteryStatus(): string {
+        if (this.flagMechanics.isLightSourceDead('lantern')) {
+            return 'The lantern battery is dead.';
+        }
+        const remainingTurns = Math.max(0, this.LANTERN_BATTERY_LIFE - this.gameState.getCurrentState().turns);
+        return `The lantern battery has ${remainingTurns} turns remaining.`;
     }
 }

@@ -22,7 +22,7 @@ export class PutCommandService implements CommandHandler {
         return command.toLowerCase().startsWith('put ');
     }
 
-    handle(command: string): string {
+    async handle(command: string): Promise<string> {
         const words = command.toLowerCase().split(' ');
         const itemName = words.slice(1).join(' ');
 

@@ -19,7 +19,7 @@ export class MoveCommandService extends BaseObjectCommandService implements Comm
         return command.toLowerCase().startsWith('move ');
     }
 
-    handle(command: string): string {
+    async handle(command: string): Promise<string> {
         const objectName = command.toLowerCase().replace('move ', '').trim();
         return this.handleObjectCommand(objectName, 'move');
     }

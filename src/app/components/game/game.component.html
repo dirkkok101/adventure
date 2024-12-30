@@ -5,10 +5,9 @@
     </div>
     <div class="game-sidebar flex-column">
         <div class="sidebar-content panel scrollable-content" *ngIf="sidebar$ | async as sidebar">
-            <div class="score">Score: {{ sidebar.score }}</div>
-            <div class="moves">Moves: {{ sidebar.moves }}</div>
-            <div class="exits">{{ sidebar.exits }}</div>
-            <div class="objects">{{ sidebar.objects }}</div>
+            <div class="location">Location: {{ sidebar.location }}</div>
+            <div class="score">Score: {{ sidebar.score }}/{{ sidebar.maxScore }}</div>
+            <div class="turns">Turns: {{ sidebar.turns }}</div>
         </div>
         <div class="game-input">
             <input class="input-field" 

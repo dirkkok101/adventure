@@ -16,43 +16,42 @@ export class InventoryMechanicsService {
         private containerMechanics: ContainerMechanicsService
     ) {}
 
-    canAddToInventory(itemId: string): boolean {
+    async canAddToInventory(itemId: string): Promise<boolean> {
         const state = this.gameState.getCurrentState();
-        const item = this.findItemById(itemId);
+        const item = await this.findItemById(itemId);
 
         if (!item || !item.canTake) {
             return false;
         }
 
         // Calculate current inventory weight
-        const currentWeight = this.listInventory().reduce((total, id) => {
-            const obj = this.findItemById(id);
-            return total + (obj?.weight || 0);
-        }, 0);
+        const inventoryItems = await Promise.all(
+            this.listInventory().map(id => this.findItemById(id))
+        );
+        const currentWeight = inventoryItems.reduce((total, obj) => 
+            total + (obj?.weight || 0), 0);
 
         return currentWeight + (item.weight || 0) <= this.MAX_INVENTORY_WEIGHT;
     }
 
-    canTakeObject(object: SceneObject): boolean {
+    async canTakeObject(object: SceneObject): Promise<boolean> {
         if (!object.canTake) {
             return false;
         }
 
-        const state = this.gameState.getCurrentState();
-
         // Check if already in inventory
-        if (this.hasItem(object.id)) {
+        if (await this.hasItem(object.id)) {
             return false;
         }
 
         // Check weight limit
-        if (!this.canAddToInventory(object.id)) {
+        if (!await this.canAddToInventory(object.id)) {
             return false;
         }
 
         // Check if it's a container with contents
         if (object.isContainer) {
-            const contents = this.containerMechanics.getContainerContents(object.id);
+            const contents = await this.containerMechanics.getContainerContents(object.id);
             if (contents.length > 0) {
                 return false;
             }
@@ -61,45 +60,33 @@ export class InventoryMechanicsService {
         return true;
     }
 
-    takeObject(object: SceneObject): { success: boolean; message: string } {
-        if (!this.canTakeObject(object)) {
-            if (object.interactions?.take?.failureMessage) {
-                return { success: false, message: object.interactions.take.failureMessage };
+    async takeObject(object: SceneObject): Promise<{ success: boolean; message: string }> {
+        if (!await this.canTakeObject(object)) {
+            if (object.interactions?.['take']?.failureMessage) {
+                return { success: false, message: object.interactions['take'].failureMessage };
             }
             return { success: false, message: `You can't take the ${object.name}.` };
         }
 
-        this.gameState.updateState(state => ({
-            ...state,
-            inventory: {
-                ...state.inventory,
-                [object.id]: true
-            }
-        }));
-        this.gameState.addKnownObject(object.id);
+        await this.addToInventory(object.id);
+        await this.gameState.addKnownObject(object.id);
 
-        if (object.interactions?.take?.message) {
-            return { success: true, message: object.interactions.take.message };
+        if (object.interactions?.['take']?.message) {
+            return { success: true, message: object.interactions['take'].message };
         }
 
         return { success: true, message: `You take the ${object.name}.` };
     }
 
-    dropObject(object: SceneObject): { success: boolean; message: string } {
-        if (!this.hasItem(object.id)) {
+    async dropObject(object: SceneObject): Promise<{ success: boolean; message: string }> {
+        if (!await this.hasItem(object.id)) {
             return { success: false, message: `You don't have the ${object.name}.` };
         }
 
-        this.gameState.updateState(state => {
-            const { [object.id]: _, ...remainingInventory } = state.inventory;
-            return {
-                ...state,
-                inventory: remainingInventory
-            };
-        });
+        await this.removeFromInventory(object.id);
 
-        if (object.interactions?.drop?.message) {
-            return { success: true, message: object.interactions.drop.message };
+        if (object.interactions?.['drop']?.message) {
+            return { success: true, message: object.interactions['drop']['message'] };
         }
 
         return { success: true, message: `You drop the ${object.name}.` };
@@ -107,14 +94,36 @@ export class InventoryMechanicsService {
 
     listInventory(): string[] {
         const state = this.gameState.getCurrentState();
-        return Object.keys(state.inventory);
+        return Object.keys(state.inventory || {});
     }
 
-    hasItem(objectId: string): boolean {
-        return !!this.gameState.getCurrentState().inventory[objectId];
+    async hasItem(objectId: string): Promise<boolean> {
+        const state = this.gameState.getCurrentState();
+        return !!state.inventory?.[objectId];
     }
 
-    private findItemById(itemId: string): SceneObject | null {
+    async addToInventory(itemId: string): Promise<void> {
+        this.gameState.updateState(state => ({
+            ...state,
+            inventory: {
+                ...state.inventory,
+                [itemId]: true
+            }
+        }));
+    }
+
+    async removeFromInventory(itemId: string): Promise<void> {
+        this.gameState.updateState(state => {
+            const inventory = state.inventory || {};
+            const { [itemId]: _, ...remainingInventory } = inventory;
+            return {
+                ...state,
+                inventory: remainingInventory
+            };
+        });
+    }
+
+    private async findItemById(itemId: string): Promise<SceneObject | null> {
         const scenes = this.sceneService.getAllScenes();
         for (const scene of scenes) {
             if (scene.objects?.[itemId]) {

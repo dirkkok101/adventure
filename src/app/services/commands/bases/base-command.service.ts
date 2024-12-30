@@ -1,15 +1,17 @@
 import { Injectable } from '@angular/core';
-import { GameCommand, SceneObject, CommandResponse } from '../../models/game-state.model';
-import { SceneService } from '../scene.service';
-import { GameStateService } from '../game-state.service';
-import { StateMechanicsService } from '../mechanics/state-mechanics.service';
-import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
-import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
-import { LightMechanicsService } from '../mechanics/light-mechanics.service';
-import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
+import { GameCommand, SceneObject, CommandResponse } from '../../../models/game-state.model';
+import { GameStateService } from '../../game-state.service';
+import { SceneService } from '../../scene.service';
+import { StateMechanicsService } from '../../mechanics/state-mechanics.service';
+import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
+import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.service';
+import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
+import { InventoryMechanicsService } from '../../mechanics/inventory-mechanics.service';
+import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
+import { ICommandService, ScoringOptions, ErrorResponse, SuccessResponse } from './command-types';
 
 @Injectable()
-export abstract class BaseObjectCommandService {
+export abstract class BaseCommandService implements ICommandService {
     constructor(
         protected gameState: GameStateService,
         protected sceneService: SceneService,
@@ -17,20 +19,33 @@ export abstract class BaseObjectCommandService {
         protected flagMechanics: FlagMechanicsService,
         protected progress: ProgressMechanicsService,
         protected lightMechanics: LightMechanicsService,
-        protected inventoryMechanics: InventoryMechanicsService
+        protected inventoryMechanics: InventoryMechanicsService,
+        protected scoreMechanics: ScoreMechanicsService
     ) {}
 
     abstract canHandle(command: GameCommand): boolean;
-
     abstract handle(command: GameCommand): Promise<CommandResponse>;
+    abstract getSuggestions?(command: GameCommand): string[];
+
+    protected async handleScoring({ action, object, container, skipGeneralScore = false }: ScoringOptions): Promise<void> {
+        await this.scoreMechanics.handleObjectScoring(
+            { action, object, container, skipGeneralScore },
+            this.flagMechanics
+        );
+    }
 
     protected async checkVisibility(object: SceneObject): Promise<boolean> {
+        if (!this.lightMechanics.isLightPresent()) {
+            return false;
+        }
         return this.lightMechanics.isObjectVisible(object) || await this.inventoryMechanics.hasItem(object.id);
     }
 
     protected checkLightInScene(): boolean {
         const scene = this.sceneService.getCurrentScene();
-        return scene ? (this.lightMechanics.isLightPresent() || !!scene.light) : false;
+        if (!scene) return false;
+        
+        return this.lightMechanics.isLightPresent() || !!scene.light;
     }
 
     protected async findObject(objectName: string): Promise<SceneObject | null> {
@@ -48,10 +63,7 @@ export abstract class BaseObjectCommandService {
 
         // Then check scene
         const objects = scene.objects || {};
-        const sceneObjects = Object.values(objects);
-        
-        // Find matching objects
-        for (const obj of sceneObjects) {
+        for (const obj of Object.values(objects)) {
             if (obj.name.toLowerCase() === objectName.toLowerCase() && 
                 await this.checkVisibility(obj)) {
                 return obj;
@@ -73,7 +85,8 @@ export abstract class BaseObjectCommandService {
         };
     }
 
-    protected noObjectError(verb: string): CommandResponse {
+    // Error responses
+    protected noObjectError(verb: string): ErrorResponse {
         return { 
             success: false, 
             message: `What do you want to ${verb}?`,
@@ -81,7 +94,7 @@ export abstract class BaseObjectCommandService {
         };
     }
 
-    protected noSceneError(): CommandResponse {
+    protected noSceneError(): ErrorResponse {
         return { 
             success: false, 
             message: 'Error: No current scene',
@@ -89,7 +102,7 @@ export abstract class BaseObjectCommandService {
         };
     }
 
-    protected tooDarkError(): CommandResponse {
+    protected tooDarkError(): ErrorResponse {
         return {
             success: false,
             message: "It's too dark to see anything.",
@@ -97,7 +110,7 @@ export abstract class BaseObjectCommandService {
         };
     }
 
-    protected objectNotFoundError(objectName: string): CommandResponse {
+    protected objectNotFoundError(objectName: string): ErrorResponse {
         return { 
             success: false, 
             message: `You don't see any ${objectName} here.`,
@@ -105,11 +118,19 @@ export abstract class BaseObjectCommandService {
         };
     }
 
-    protected cannotInteractError(verb: string, objectName: string): CommandResponse {
-        return { 
-            success: false, 
-            message: `You can't ${verb} the ${objectName}.`,
-            incrementTurn: false 
+    protected objectNotVisibleError(objectName: string): ErrorResponse {
+        return {
+            success: false,
+            message: `You can't see the ${objectName} clearly in the dark.`,
+            incrementTurn: false
+        };
+    }
+
+    protected cannotInteractError(action: string, objectName: string): ErrorResponse {
+        return {
+            success: false,
+            message: `You can't ${action} the ${objectName}.`,
+            incrementTurn: false
         };
     }
 }

@@ -4,9 +4,21 @@ import { MovementCommandService } from './movement-command.service';
 import { InventoryCommandService } from './inventory-command.service';
 import { DropCommandService } from './drop-command.service';
 import { LookCommandService } from './look-command.service';
-import { GameStateService } from '../game-state.service';
+import { ExamineCommandService } from './examine-command.service';
+import { OpenCloseCommandService } from './open-close-command.service';
+import { TakeCommandService } from './take-command.service';
+import { PutCommandService } from './put-command.service';
+import { ReadCommandService } from './read-command.service';
+import { TurnCommandService } from './turn-command.service';
+import { EnterCommandService } from './enter-command.service';
 import { GameTextService } from '../game-text.service';
 import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
+
+interface CommandHandler {
+    canHandle(command: GameCommand): boolean;
+    handle(command: GameCommand): Promise<{ success: boolean; message: string; incrementTurn: boolean }>;
+    getSuggestions?(command: GameCommand): string[];
+}
 
 const DIRECTION_ALIASES: { [key: string]: string } = {
     'n': 'north',
@@ -22,24 +34,64 @@ const DIRECTIONS = new Set([
     'n', 's', 'e', 'w', 'u', 'd'
 ]);
 
+const VERB_ALIASES: { [key: string]: string } = {
+    'l': 'look',
+    'i': 'inventory',
+    'x': 'examine',
+    'get': 'take',
+    'grab': 'take',
+    'place': 'put',
+    'read': 'examine',
+    'check': 'examine',
+    'go': 'enter'
+};
+
 @Injectable({
     providedIn: 'root'
 })
 export class CommandService {
+    private commandHandlers: CommandHandler[];
+
     constructor(
         private movementCommand: MovementCommandService,
         private inventoryCommand: InventoryCommandService,
         private dropCommand: DropCommandService,
         private lookCommand: LookCommandService,
+        private examineCommand: ExamineCommandService,
+        private openCloseCommand: OpenCloseCommandService,
+        private takeCommand: TakeCommandService,
+        private putCommand: PutCommandService,
+        private readCommand: ReadCommandService,
+        private turnCommand: TurnCommandService,
+        private enterCommand: EnterCommandService,
         private gameText: GameTextService,
         private progress: ProgressMechanicsService
-    ) {}
+    ) {
+        // Only add handlers that implement the CommandHandler interface
+        this.commandHandlers = [
+            movementCommand,
+            inventoryCommand,
+            lookCommand,
+            openCloseCommand,
+            turnCommand
+        ].filter(handler => 
+            typeof handler.canHandle === 'function' && 
+            typeof handler.handle === 'function'
+        );
+    }
 
-    processInput(input: string): { success: boolean; message?: string; incrementTurn: boolean } {
+    async processInput(input: string): Promise<{ success: boolean; message?: string; incrementTurn: boolean }> {
         const command = this.parseCommand(input.toLowerCase());
         if (!command) {
-            return { success: false, message: "I don't understand that command.", incrementTurn: false };
+            return { 
+                success: false, 
+                message: "I don't understand that command.", 
+                incrementTurn: false 
+            };
         }
+
+        // Resolve verb aliases
+        command.verb = VERB_ALIASES[command.verb] || command.verb;
 
         // Handle movement commands
         if (DIRECTIONS.has(command.verb)) {
@@ -47,56 +99,101 @@ export class CommandService {
             return this.movementCommand.handle(command);
         }
 
-        // Handle inventory commands
-        if (command.verb === 'inventory' || command.verb === 'i') {
-            return this.inventoryCommand.handle(command);
+        // Find appropriate command handler
+        for (const handler of this.commandHandlers) {
+            if (handler.canHandle(command)) {
+                try {
+                    const result = await handler.handle(command);
+                    if (result.incrementTurn) {
+                        this.progress.incrementTurns();
+                    }
+                    return result;
+                } catch (error) {
+                    console.error('Error handling command:', error);
+                    return {
+                        success: false,
+                        message: "Something went wrong processing that command.",
+                        incrementTurn: false
+                    };
+                }
+            }
         }
 
-        // Handle drop commands
-        if (command.verb === 'drop') {
-            return this.dropCommand.handle(command);
-        }
-
-        // Handle look commands
-        if (command.verb === 'look' || command.verb === 'l') {
-            return this.lookCommand.handle(command);
-        }
-
-        return { success: false, message: "I don't understand that command.", incrementTurn: false };
+        return {
+            success: false,
+            message: "I don't know how to do that.",
+            incrementTurn: false
+        };
     }
 
-    private parseCommand(input: string): GameCommand | null {
+    parseCommand(input: string): GameCommand | null {
+        if (!input) return null;
+
         const words = input.trim().toLowerCase().split(/\s+/);
         if (words.length === 0) return null;
 
-        const command: GameCommand = {
-            verb: words[0],
-            originalInput: input
-        };
+        const verb = words[0];
+        let object: string | undefined;
+        let preposition: string | undefined;
+        let indirect: string | undefined;
 
-        // Handle single word commands
+        // Handle single word commands (look, inventory, etc.)
         if (words.length === 1) {
-            return command;
+            return { verb, originalInput: input };
         }
 
-        // Handle two word commands (verb + object)
-        if (words.length === 2) {
-            command.object = words[1];
-            return command;
+        // Handle direction aliases
+        if (DIRECTIONS.has(verb)) {
+            return { verb, originalInput: input };
         }
 
-        // Handle commands with prepositions
-        const prepositions = ['in', 'on', 'at', 'to', 'with', 'under', 'behind'];
+        // Look for prepositions
+        const prepositions = ['in', 'on', 'at', 'to', 'with', 'under', 'behind', 'through'];
         const prepIndex = words.findIndex((word, index) => index > 0 && prepositions.includes(word));
 
         if (prepIndex !== -1) {
-            command.object = words.slice(1, prepIndex).join(' ');
-            command.preposition = words[prepIndex];
-            command.indirect = words.slice(prepIndex + 1).join(' ');
+            // Words between verb and preposition form the object
+            object = words.slice(1, prepIndex).join(' ');
+            preposition = words[prepIndex];
+            // Words after preposition form the indirect object
+            if (prepIndex < words.length - 1) {
+                indirect = words.slice(prepIndex + 1).join(' ');
+            }
         } else {
-            command.object = words.slice(1).join(' ');
+            // No preposition found, all words after verb form the object
+            object = words.slice(1).join(' ');
         }
 
-        return command;
+        return {
+            verb,
+            object,
+            preposition,
+            indirect,
+            originalInput: input
+        };
+    }
+
+    getSuggestions(input: string): string[] {
+        const suggestions: string[] = [];
+        const command = this.parseCommand(input.toLowerCase());
+        
+        if (!command) return suggestions;
+
+        // Add common verb suggestions
+        if (input.length <= 2) {
+            suggestions.push(...Object.keys(VERB_ALIASES));
+            suggestions.push(...DIRECTIONS);
+        }
+
+        // Add context-specific suggestions from handlers
+        for (const handler of this.commandHandlers) {
+            if (handler.getSuggestions) {
+                suggestions.push(...handler.getSuggestions(command));
+            }
+        }
+
+        return [...new Set(suggestions)].filter(s => 
+            s.toLowerCase().startsWith(input.toLowerCase())
+        ).sort();
     }
 }

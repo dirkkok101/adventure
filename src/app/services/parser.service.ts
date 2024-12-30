@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { GameCommand } from '../models/game-state.model';
-import { verbSynonyms } from '../data/game-mechanics';
+import { verbSynonyms } from '../data/verb-synonyms';
 
 @Injectable({
     providedIn: 'root'

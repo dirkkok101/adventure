@@ -1,74 +1,107 @@
 import { Injectable } from '@angular/core';
 import { GameStateService } from '../game-state.service';
-import { SceneService } from '../scene.service';
-import { ContainerMechanicsService } from './container-mechanics.service';
+import { Observable, map } from 'rxjs';
+import { FlagMechanicsService } from './flag-mechanics.service';
+
+export interface GameScore {
+    score: number;
+    maxScore: number;
+    trophies: string[];
+}
+
+export interface ScoringOptions {
+    action: string;
+    object: any;
+    container?: any;
+    skipGeneralScore?: boolean;
+}
 
 @Injectable({
     providedIn: 'root'
 })
 export class ScoreMechanicsService {
-    private readonly TREASURE_SCORE = 10;
-    private readonly LANTERN_BATTERY_LIFE = 100;
+    private readonly TROPHY_SCORE_THRESHOLD = 50;
 
-    constructor(
-        private gameState: GameStateService,
-        private sceneService: SceneService,
-        private containerMechanics: ContainerMechanicsService
-    ) {
-        // Subscribe to state changes to handle mechanics
-        this.gameState.state$.subscribe(state => {
-            this.handleTurnEffects(state);
-        });
-    }
-
-    private handleTurnEffects(state: any): void {
-        // Handle lantern battery
-        if (state.flags['lanternOn']) {
-            if (state.turns >= this.LANTERN_BATTERY_LIFE) {
-                this.gameState.setFlag('lanternDead');
-                this.gameState.removeFlag('lanternOn');
-                this.gameState.removeFlag('hasLight');
-            }
-        }
-
-        // Handle trophy case scoring
-        const trophyCase = this.sceneService.getCurrentScene()?.objects?.['trophyCase'];
-        if (trophyCase) {
-            const contents = this.containerMechanics.getContainerContents('trophyCase');
-            const treasureCount = contents.filter(id => {
-                const obj = this.sceneService.getCurrentScene()?.objects?.[id];
-                return obj?.isTreasure;
-            }).length;
-
-            // Update max score based on available treasures
-            const allTreasures = Object.values(this.sceneService.getCurrentScene()?.objects || {})
-                .filter(obj => obj.isTreasure).length;
-            
-            this.gameState.updateState({
-                ...state,
-                maxScore: allTreasures * this.TREASURE_SCORE
-            });
-
-            // Check for game completion
-            if (treasureCount === allTreasures) {
-                this.gameState.updateState({
-                    ...state,
-                    gameWon: true
-                });
-            }
-        }
-    }
+    constructor(private gameState: GameStateService) {}
 
     addScore(points: number): void {
+        this.gameState.updateState(state => {
+            const newScore = state.score + points;
+            return {
+                ...state,
+                score: newScore
+            };
+        });
+        this.checkTrophyAchievement();
+    }
+
+    async handleObjectScoring(options: ScoringOptions, flagMechanics: FlagMechanicsService): Promise<void> {
+        const { action, object, container, skipGeneralScore = false } = options;
+
+        // Handle container-specific scoring
+        if (container && object.scoring?.containerTargets?.[container.id]) {
+            const scoreKey = `${action}_${object.id}_in_${container.id}`;
+            if (!flagMechanics.hasFlag(scoreKey)) {
+                this.addScore(object.scoring.containerTargets[container.id]);
+                flagMechanics.setFlag(scoreKey);
+            }
+        }
+        
+        // Handle general action scoring if not skipped and no container score was awarded
+        if (!skipGeneralScore && object.scoring && 
+            (action === 'drop' || action === 'take' || action === 'use') && 
+            object.scoring[action] !== undefined) {
+            const scoreKey = `${action}_${object.id}`;
+            if (!flagMechanics.hasFlag(scoreKey)) {
+                this.addScore(object.scoring[action]);
+                flagMechanics.setFlag(scoreKey);
+            }
+        }
+    }
+
+    private checkTrophyAchievement(): void {
         const state = this.gameState.getCurrentState();
-        this.gameState.updateState({
-            ...state,
-            score: state.score + points
+        if (state.score >= this.TROPHY_SCORE_THRESHOLD && !this.hasTrophy('adventurer')) {
+            this.addTrophy('adventurer');
+        }
+    }
+
+    addTrophy(trophyId: string): void {
+        this.gameState.updateState(state => {
+            if (state.trophies.includes(trophyId)) {
+                return state; // Trophy already earned
+            }
+            return {
+                ...state,
+                trophies: [...state.trophies, trophyId]
+            };
         });
     }
 
-    getScore(): string {
-        const state = this.gameState.getCurrentState();
-        return `Your score is ${state.score} out of a possible ${state.maxScore}.`;
+    hasTrophy(trophyId: string): boolean {
+        return this.gameState.getCurrentState().trophies.includes(trophyId);
+    }
+
+    getTrophies(): string[] {
+        return [...this.gameState.getCurrentState().trophies];
+    }
+
+    getScore(): number {
+        return this.gameState.getCurrentState().score;
+    }
+
+    getMaxScore(): number {
+        return this.gameState.getCurrentState().maxScore;
+    }
+
+    // Observable for score updates
+    getScoreInfo(): Observable<GameScore> {
+        return this.gameState.state$.pipe(
+            map(state => ({
+                score: state.score,
+                maxScore: state.maxScore,
+                trophies: [...state.trophies]
+            }))
+        );
     }
 }

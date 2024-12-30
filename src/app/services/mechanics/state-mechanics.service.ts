@@ -1,11 +1,13 @@
 import { Injectable } from '@angular/core';
 import { GameStateService } from '../game-state.service';
 import { SceneService } from '../scene.service';
-import { SceneInteraction } from '../../models/game-state.model';
+import { SceneInteraction, SceneObject } from '../../models/game-state.model';
 import { FlagMechanicsService } from './flag-mechanics.service';
 import { InventoryMechanicsService } from './inventory-mechanics.service';
 import { ProgressMechanicsService } from './progress-mechanics.service';
 import { GameTextService } from '../game-text.service';
+import { LightMechanicsService } from './light-mechanics.service';
+import { ScoreMechanicsService } from './score-mechanics.service';
 
 @Injectable({
     providedIn: 'root'
@@ -17,11 +19,12 @@ export class StateMechanicsService {
         private flagMechanics: FlagMechanicsService,
         private inventoryMechanics: InventoryMechanicsService,
         private progressMechanics: ProgressMechanicsService,
+        private lightMechanics: LightMechanicsService,
+        private scoreMechanics: ScoreMechanicsService,
         private gameText: GameTextService
     ) {}
 
-    handleInteraction(object: SceneObject, verb: string): { success: boolean; message: string } {
-        const state = this.gameState.getCurrentState();
+    async handleInteraction(object: SceneObject, verb: string): Promise<{ success: boolean; message: string }> {
         const interaction = object.interactions?.[verb];
 
         if (!interaction) {
@@ -29,67 +32,68 @@ export class StateMechanicsService {
         }
 
         // Check required flags
-        if (interaction.requiredFlags && !this.flagMechanics.checkFlags(interaction.requiredFlags)) {
+        if (interaction.requiredFlags && !await this.checkRequiredFlags(interaction.requiredFlags)) {
             return { success: false, message: interaction.failureMessage || "You can't do that." };
         }
 
         // Check if light is required and present
-        if (interaction.requiresLight && !this.gameState.getCurrentState().light) {
+        if (interaction.requiresLight && !this.lightMechanics.isLightPresent()) {
             return { success: false, message: "It's too dark to do that." };
         }
 
         // Handle inventory changes
         if (interaction.addToInventory) {
-            interaction.addToInventory.forEach(itemId => {
-                this.inventoryMechanics.addToInventory(itemId);
-            });
+            for (const itemId of interaction.addToInventory) {
+                await this.inventoryMechanics.addToInventory(itemId);
+            }
         }
 
         if (interaction.removeFromInventory) {
-            interaction.removeFromInventory.forEach(itemId => {
-                this.inventoryMechanics.removeFromInventory(itemId);
-            });
+            for (const itemId of interaction.removeFromInventory) {
+                await this.inventoryMechanics.removeFromInventory(itemId);
+            }
         }
 
         // Handle flag changes
         if (interaction.grantsFlags) {
-            interaction.grantsFlags.forEach(flag => {
-                this.flagMechanics.setFlag(flag);
-            });
+            for (const flag of interaction.grantsFlags) {
+                await this.flagMechanics.setFlag(flag);
+            }
         }
 
         if (interaction.removesFlags) {
-            interaction.removesFlags.forEach(flag => {
-                this.flagMechanics.removeFlag(flag);
-            });
+            for (const flag of interaction.removesFlags) {
+                await this.flagMechanics.removeFlag(flag);
+            }
         }
 
         // Handle score
         if (interaction.score) {
-            this.progressMechanics.addScore(interaction.score);
+            this.scoreMechanics.addScore(interaction.score);
         }
 
         // Handle light state
         if (interaction.providesLight !== undefined) {
-            this.gameState.setLight(interaction.providesLight);
+            const result = this.lightMechanics.handleLightSource(object.id, interaction.providesLight);
+            if (!result.success) {
+                return result;
+            }
         }
 
         // Handle revealed objects
         if (interaction.revealsObjects) {
-            interaction.revealsObjects.forEach(objectId => {
-                this.gameState.updateState(state => ({
-                    ...state,
-                    knownObjects: new Set([...state.knownObjects, objectId])
-                }));
-            });
+            for (const objectId of interaction.revealsObjects) {
+                this.flagMechanics.setFlag(`revealed_${objectId}`);
+            }
         }
 
-        return { success: true, message: this.getStateBasedDescription(interaction, interaction.message) };
+        return { 
+            success: true, 
+            message: await this.getStateBasedDescription(interaction, interaction.message) 
+        };
     }
 
-    getStateBasedDescription(object: { states?: { [key: string]: string } }, defaultDesc: string): string {
-        const state = this.gameState.getCurrentState();
-        
+    async getStateBasedDescription(object: { states?: { [key: string]: string } }, defaultDesc: string): Promise<string> {
         if (!object.states) {
             return defaultDesc;
         }
@@ -97,14 +101,14 @@ export class StateMechanicsService {
         // Find matching state description
         for (const [flagCombo, desc] of Object.entries(object.states)) {
             const flags = flagCombo.split(',');
-            const matches = flags.every(flag => {
+            const matches = await Promise.all(flags.map(async flag => {
                 if (flag.startsWith('!')) {
-                    return !state.flags[flag.substring(1)];
+                    return !await this.flagMechanics.hasFlag(flag.substring(1));
                 }
-                return state.flags[flag];
-            });
+                return await this.flagMechanics.hasFlag(flag);
+            }));
 
-            if (matches) {
+            if (matches.every(m => m)) {
                 return desc;
             }
         }
@@ -112,7 +116,7 @@ export class StateMechanicsService {
         return defaultDesc;
     }
 
-    checkRequiredFlags(flags: string[]): boolean {
+    private async checkRequiredFlags(flags: string[]): Promise<boolean> {
         return this.flagMechanics.checkFlags(flags);
     }
 }

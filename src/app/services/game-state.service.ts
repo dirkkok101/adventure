@@ -18,7 +18,8 @@ export class GameStateService {
     knownObjects: new Set<string>(),
     gameOver: false,
     gameWon: false,
-    light: false
+    light: false,
+    trophies: []
   };
 
   private stateSubject = new BehaviorSubject<GameState>(this.state);
@@ -46,7 +47,8 @@ export class GameStateService {
       knownObjects: new Set<string>(),
       gameOver: false,
       gameWon: false,
-      light: false
+      light: false,
+      trophies: []
     }));
   }
 
@@ -62,5 +64,16 @@ export class GameStateService {
       ...state,
       light: isLit
     }));
+  }
+
+  async addKnownObject(objectId: string): Promise<void> {
+    this.updateState(state => {
+      const newKnownObjects = new Set(state.knownObjects);
+      newKnownObjects.add(objectId);
+      return {
+        ...state,
+        knownObjects: newKnownObjects
+      };
+    });
   }
 }

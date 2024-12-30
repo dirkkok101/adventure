@@ -1,8 +1,17 @@
 import { Injectable } from '@angular/core';
 import { GameStateService } from './game-state.service';
-import { Scene, SceneObject } from '../models/game-state.model';
+import { Scene, SceneObject, SceneExit, GameState } from '../models/game-state.model';
 import { FlagMechanicsService } from './mechanics/flag-mechanics.service';
 import { StateMechanicsService } from './mechanics/state-mechanics.service';
+import { GameTextService } from './game-text.service';
+import { Observable, map } from 'rxjs';
+
+interface SidebarInfo {
+    location: string;
+    score: number;
+    turns: number;
+    maxScore: number;
+}
 
 @Injectable({
     providedIn: 'root'
@@ -13,7 +22,8 @@ export class SceneService {
     constructor(
         private gameState: GameStateService,
         private flagMechanics: FlagMechanicsService,
-        private stateMechanics: StateMechanicsService
+        private stateMechanics: StateMechanicsService,
+        private gameText: GameTextService
     ) {}
 
     loadScenes(scenes: { [key: string]: Scene }) {
@@ -42,16 +52,13 @@ export class SceneService {
         }
 
         // Get base description
-        let description = this.stateMechanics.getStateBasedDescription(
-            scene,
-            scene.descriptions.default
-        );
+        let description = scene.descriptions.states?.[scene.descriptions.default] || scene.descriptions.default;
 
         // Add visible objects descriptions
         const visibleObjects = this.getVisibleObjects(scene);
         if (visibleObjects.length > 0) {
             description += '\n\n' + visibleObjects.map(obj => 
-                this.stateMechanics.getStateBasedDescription(obj, obj.descriptions.default)
+                obj.descriptions.states?.[obj.descriptions.default] || obj.descriptions.default
             ).join('\n');
         }
 
@@ -87,9 +94,47 @@ export class SceneService {
 
         const visibleExits = scene.exits
             .filter(exit => !exit.requiredFlags || this.flagMechanics.checkFlags(exit.requiredFlags))
-            .map(exit => this.stateMechanics.getStateBasedDescription(exit, exit.description))
+            .map(exit => exit.description)
             .filter(desc => desc);
 
         return visibleExits.join('\n');
+    }
+
+    getScenes(): { [key: string]: Scene } {
+        return this.scenes;
+    }
+
+    getSidebarInfo(): Observable<SidebarInfo> {
+        return this.gameState.state$.pipe(
+            map((state: GameState) => {
+                const currentScene = this.getScene(state.currentScene);
+                return {
+                    location: currentScene?.name || 'Unknown',
+                    score: state.score,
+                    turns: state.turns,
+                    maxScore: state.maxScore
+                };
+            })
+        );
+    }
+
+    initializeGame() {
+        const startScene = this.getStartScene();
+        if (!startScene) {
+            throw new Error('No start scene found');
+        }
+
+        this.gameState.initializeState(startScene.id);
+        this.gameText.clearGameText();
+        this.gameText.addText(this.getSceneDescription(startScene));
+    }
+
+    getAllScenes(): Scene[] {
+        return Object.values(this.scenes);
+    }
+
+    findObject(objectId: string): SceneObject | null {
+        const currentScene = this.getCurrentScene();
+        return currentScene?.objects?.[objectId] || null;
     }
 }

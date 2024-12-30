@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { GameStateService } from '../game-state.service';
 import { SceneService } from '../scene.service';
 import { SceneObject } from '../../models/game-state.model';
+import { FlagMechanicsService } from './flag-mechanics.service';
 
 @Injectable({
     providedIn: 'root'
@@ -9,10 +10,11 @@ import { SceneObject } from '../../models/game-state.model';
 export class ContainerMechanicsService {
     constructor(
         private gameState: GameStateService,
-        private sceneService: SceneService
+        private sceneService: SceneService,
+        private flagMechanics: FlagMechanicsService
     ) {}
 
-    canAddToContainer(containerId: string, itemId: string): boolean {
+    async canAddToContainer(containerId: string, itemId: string): Promise<boolean> {
         const state = this.gameState.getCurrentState();
         const scene = this.sceneService.getCurrentScene();
         
@@ -21,12 +23,12 @@ export class ContainerMechanicsService {
         }
 
         const container = scene.objects[containerId];
-        if (!container.isContainer || !container.isOpen) {
+        if (!container.isContainer || !this.isOpen(containerId)) {
             return false;
         }
 
         // Check capacity
-        const currentContents = state.containers[containerId] || [];
+        const currentContents = await this.getContainerContents(containerId);
         if (container.capacity && currentContents.length >= container.capacity) {
             return false;
         }
@@ -34,9 +36,12 @@ export class ContainerMechanicsService {
         return true;
     }
 
-    addToContainer(containerId: string, itemId: string): boolean {
-        if (!this.canAddToContainer(containerId, itemId)) {
-            return false;
+    async addToContainer(containerId: string, itemId: string): Promise<{ success: boolean; message: string }> {
+        if (!await this.canAddToContainer(containerId, itemId)) {
+            return {
+                success: false,
+                message: "You can't put that there."
+            };
         }
 
         this.gameState.updateState(state => {
@@ -49,15 +54,21 @@ export class ContainerMechanicsService {
                 }
             };
         });
-        return true;
+
+        return {
+            success: true,
+            message: "Added to container."
+        };
     }
 
-    removeFromContainer(containerId: string, itemId: string): boolean {
-        const state = this.gameState.getCurrentState();
-        const currentContents = state.containers[containerId] || [];
+    async removeFromContainer(containerId: string, itemId: string): Promise<{ success: boolean; message: string }> {
+        const currentContents = await this.getContainerContents(containerId);
         
         if (!currentContents.includes(itemId)) {
-            return false;
+            return {
+                success: false,
+                message: "That item isn't in there."
+            };
         }
 
         this.gameState.updateState(state => {
@@ -70,19 +81,27 @@ export class ContainerMechanicsService {
                 }
             };
         });
-        return true;
+
+        return {
+            success: true,
+            message: "Removed from container."
+        };
     }
 
-    getContainerContents(containerId: string): string[] {
+    async getContainerContents(containerId: string): Promise<string[]> {
         return this.gameState.getCurrentState().containers[containerId] || [];
     }
 
-    openContainer(container: SceneObject): { success: boolean; message: string } {
+    isOpen(containerId: string): boolean {
+        return this.flagMechanics.isContainerOpen(containerId);
+    }
+
+    async openContainer(container: SceneObject): Promise<{ success: boolean; message: string }> {
         if (!container.isContainer) {
             return { success: false, message: 'That is not a container.' };
         }
 
-        if (container.isOpen) {
+        if (this.isOpen(container.id)) {
             return { success: false, message: 'It is already open.' };
         }
 
@@ -90,32 +109,20 @@ export class ContainerMechanicsService {
             return { success: false, message: 'It is locked.' };
         }
 
-        this.gameState.updateState(state => ({
-            ...state,
-            flags: {
-                ...state.flags,
-                [`${container.id}_open`]: true
-            }
-        }));
+        this.flagMechanics.setContainerOpen(container.id, true);
         return { success: true, message: `You open the ${container.name}.` };
     }
 
-    closeContainer(container: SceneObject): { success: boolean; message: string } {
+    async closeContainer(container: SceneObject): Promise<{ success: boolean; message: string }> {
         if (!container.isContainer) {
             return { success: false, message: 'That is not a container.' };
         }
 
-        if (!container.isOpen) {
+        if (!this.isOpen(container.id)) {
             return { success: false, message: 'It is already closed.' };
         }
 
-        this.gameState.updateState(state => {
-            const { [`${container.id}_open`]: _, ...remainingFlags } = state.flags;
-            return {
-                ...state,
-                flags: remainingFlags
-            };
-        });
+        this.flagMechanics.setContainerOpen(container.id, false);
         return { success: true, message: `You close the ${container.name}.` };
     }
 }
