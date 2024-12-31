@@ -9,7 +9,6 @@ import { scenes, startingScene } from '../data/scenes';
 interface SidebarInfo {
     location: string;
     score: number;
-    turns: number;
     maxScore: number;
 }
 
@@ -134,23 +133,6 @@ export class SceneService {
             if (!exit.requiredFlags) return true;
             return this.flagMechanics.checkFlags(exit.requiredFlags);
         });
-    }
-
-    /**
-     * Get sidebar information for display
-     */
-    getSidebarInfo(): Observable<SidebarInfo> {
-        return this.gameState.state$.pipe(
-            map(state => {
-                const scene = this.getScene(state.currentScene);
-                return {
-                    location: scene?.name || 'Unknown',
-                    score: state.score,
-                    turns: state.turns,
-                    maxScore: state.maxScore
-                };
-            })
-        );
     }
 
     async findObject(objectName: string): Promise<SceneObject | null> {

@@ -1,0 +1,20 @@
+<div class="game-input">
+    <input #gameInput
+           type="text"
+           [value]="currentInput"
+           (input)="onInput($event)"
+           (keydown)="onKeyDown($event)"
+           placeholder="What would you like to do?"
+           autocomplete="off"
+           autocorrect="off"
+           autocapitalize="off"
+           spellcheck="false">
+    
+    <div class="suggestions-dropdown" *ngIf="filteredCommands.length > 0">
+        <div class="suggestion" 
+             *ngFor="let command of filteredCommands"
+             (click)="selectSuggestion(command)">
+            {{ command }}
+        </div>
+    </div>
+</div>

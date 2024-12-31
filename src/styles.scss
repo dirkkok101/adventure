@@ -1,126 +1,161 @@
-/* Global Variables */
+/* Import Google Fonts - Share Tech Mono for that retro terminal look */
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+/* Variables */
 :root {
-  --color-bg-primary: #121212;
-  --color-bg-secondary: #1e1e1e;
-  --color-bg-tertiary: #2d2d2d;
-  --color-border: #3d3d3d;
-  --color-border-hover: #4d4d4d;
-  --color-text-primary: #d4d4d4;
-  --color-text-secondary: #a0a0a0;
-  --color-accent: #0078d4;
-  --spacing-xs: 0.5rem;
-  --spacing-sm: 1rem;
-  --spacing-md: 1.5rem;
-  --spacing-lg: 2rem;
-  --border-radius-sm: 4px;
-  --border-radius-md: 8px;
+  /* Colors inspired by classic Zork green phosphor display */
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #001100;
+  --color-bg-tertiary: #002200;
+  
+  --color-text-primary: #33ff33;  /* Bright green */
+  --color-text-secondary: #00cc00; /* Darker green */
+  --color-text-accent: #66ff66;   /* Lighter green for highlights */
+  
+  --color-border: #004400;        /* Much darker green for borders */
+  --color-border-highlight: #006600; /* Slightly brighter border for hover */
+  --color-input-bg: #001100;
+  
+  /* Font family */
+  --font-family-mono: 'Share Tech Mono', monospace;
+  
+  /* Spacing */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  
+  /* Font Sizes */
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 22px;
 }
 
-/* Reset and Base Styles */
-html, body {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  overflow: hidden;
+/* Base Styles */
+html {
+  background-color: var(--color-bg-primary) !important;
 }
 
 body {
-  font-family: monospace;
-  background-color: var(--color-bg-primary);
-  color: var(--color-text-primary);
-  line-height: 1.6;
-}
-
-/* Layout Classes */
-.full-height {
   height: 100%;
-  min-height: 0;
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-bg-primary) !important;
+  color: var(--color-text-primary) !important;
+  font-family: var(--font-family-mono) !important;
+  font-size: var(--font-size-md);
+  line-height: 1.4;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.flex-column {
-  display: flex;
-  flex-direction: column;
+app-root {
+  display: block;
+  height: 100vh;
+  background-color: var(--color-bg-primary) !important;
 }
 
-.flex-grow {
-  flex: 1;
-  min-height: 0;
+/* Override Bootstrap defaults */
+.container-fluid {
+  background-color: var(--color-bg-primary) !important;
+  min-height: 100vh;
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: 100% !important;
 }
 
-/* Common Component Styles */
-.scrollable-content {
-  overflow-y: auto;
-  &::-webkit-scrollbar {
-    width: 8px;
-  }
+.row {
+  margin: 0 !important;
+  --bs-gutter-x: 0 !important;
+  --bs-gutter-y: 0 !important;
+  background-color: var(--color-bg-primary) !important;
+}
 
-  &::-webkit-scrollbar-track {
+.col, .col-auto {
+  padding: 0 !important;
+  margin: 0 !important;
+  background-color: var(--color-bg-primary) !important;
+}
+
+/* Text Effects */
+@keyframes textShadowPulse {
+  0% { text-shadow: 0 0 8px rgba(51, 255, 51, 0.3); }
+  50% { text-shadow: 0 0 12px rgba(51, 255, 51, 0.5); }
+  100% { text-shadow: 0 0 8px rgba(51, 255, 51, 0.3); }
+}
+
+.text-glow {
+  animation: textShadowPulse 2s infinite;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-bg-tertiary);
+  border-radius: 0;
+  &:hover {
     background: var(--color-bg-secondary);
   }
-
-  &::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: var(--border-radius-sm);
-    &:hover {
-      background: var(--color-border-hover);
-    }
-  }
 }
 
-.panel {
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  padding: var(--spacing-sm);
+/* Common Classes */
+.scrollable-content {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bg-tertiary) var(--color-bg-primary);
 }
 
-.input-field {
-  width: 100%;
-  padding: var(--spacing-xs);
-  font-family: monospace;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-primary);
-  border-radius: var(--border-radius-sm);
-
-  &:focus {
-    outline: none;
-    border-color: var(--color-accent);
-  }
+/* Override Bootstrap text colors */
+.text-secondary {
+  color: var(--color-text-secondary) !important;
 }
 
-/* Game-specific Classes */
-.game-text {
-  font-size: 14px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  
-  &-line {
-    margin-bottom: var(--spacing-xs);
-    &:last-child {
-      margin-bottom: 0;
-    }
-  }
+.text-info {
+  color: var(--color-text-accent) !important;
 }
 
-.suggestions-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-top: none;
-  border-radius: 0 0 var(--border-radius-sm) var(--border-radius-sm);
-  max-height: 150px;
-  overflow-y: auto;
-  z-index: 1000;
+.bg-dark {
+  background-color: var(--color-bg-primary) !important;
+}
 
-  .suggestion {
-    padding: var(--spacing-xs);
-    cursor: pointer;
-    &:hover {
-      background: var(--color-bg-tertiary);
-    }
-  }
+/* Force dark theme */
+* {
+  background-color: inherit;
+}
+
+/* Bootstrap overrides */
+.bg-dark {
+  background-color: var(--color-bg-primary) !important;
+}
+
+.container-fluid.bg-dark {
+  background-color: var(--color-bg-primary) !important;
+}
+
+.row.bg-dark {
+  background-color: var(--color-bg-primary) !important;
+}
+
+.col.bg-dark {
+  background-color: var(--color-bg-primary) !important;
+}
+
+/* Additional Bootstrap container overrides */
+.container, .container-fluid {
+  background-color: var(--color-bg-primary) !important;
+}
+
+/* Force all direct children of body to have dark background */
+body > * {
+  background-color: var(--color-bg-primary) !important;
 }

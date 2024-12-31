@@ -6,7 +6,17 @@ import { SaveLoadService } from './save-load.service';
 import { GameTextService } from './game-text.service';
 import { ProgressMechanicsService } from './mechanics/progress-mechanics.service';
 import { GameInitializationService } from './game-initialization.service';
-import { GameState } from '../models/game-state.model';
+import { GameState, Scene, SceneObject } from '../models/game-state.model';
+import { Observable } from 'rxjs';
+import { FlagMechanicsService } from './mechanics/flag-mechanics.service';
+
+interface SidebarData {
+    commands: string;
+    objects: string;
+    exits: string;
+    moves: number;
+    score: number;
+}
 
 @Injectable({
     providedIn: 'root'
@@ -19,7 +29,8 @@ export class GameService {
         private saveLoad: SaveLoadService,
         private gameText: GameTextService,
         private progress: ProgressMechanicsService,
-        private gameInit: GameInitializationService
+        private gameInit: GameInitializationService,
+        private flagMechanics: FlagMechanicsService
     ) {}
 
     async initializeGame(): Promise<void> {
@@ -32,11 +43,22 @@ export class GameService {
         }
     }
 
+    /**
+     * Get an observable of the game state. Use this in components for reactive UI updates.
+     */
+    getCurrentState$(): Observable<GameState> {
+        return this.gameState.state$;
+    }
+
+    /**
+     * Get the current game state synchronously. Only use this in services for game logic processing.
+     * @internal Use getCurrentState$() in components instead
+     */
     getCurrentState(): GameState {
         return this.gameState.getCurrentState();
     }
 
-    private async processCommand(input: string): Promise<void> {
+    async processCommand(input: string): Promise<void> {
         if (!input.trim()) {
             return;
         }
@@ -142,5 +164,119 @@ export class GameService {
 
     getGameText() {
         return this.gameText.getGameText$();
+    }
+
+    /**
+     * Get all known items in a scene, including visible objects and items in open containers
+     */
+    private async getKnownItems(scene: Scene): Promise<SceneObject[]> {
+        if (!scene.objects) return [];
+
+        const visibleObjects = this.sceneService.getVisibleObjects(scene);
+        const knownItems = [...visibleObjects];
+
+        // Add items from open containers
+        for (const obj of visibleObjects) {
+            if (obj.isContainer && this.flagMechanics.isContainerOpen(obj.id)) {
+                const state = this.getCurrentState();
+                const containerContents = state.containers[obj.id] || [];
+                for (const itemId of containerContents) {
+                    const item = scene.objects[itemId];
+                    if (item) {
+                        knownItems.push(item);
+                    }
+                }
+            }
+        }
+
+        return knownItems;
+    }
+
+    /**
+     * Get available commands based on scene state and known items
+     */
+    private async getAvailableCommands(scene: Scene): Promise<string[]> {
+        // Default commands always available
+        const commands = [
+            'look',
+            'inventory',
+            'examine',
+            'help'
+        ];
+
+        // Get known items and their states
+        const knownItems = await this.getKnownItems(scene);
+        
+        // Add item-specific commands based on state
+        for (const item of knownItems) {
+            // Add examine command for the specific item
+            commands.push(`examine ${item.name}`);
+
+            // Container-specific commands
+            if (item.isContainer) {
+                const isOpen = this.flagMechanics.isContainerOpen(item.id);
+                commands.push(isOpen ? `close ${item.name}` : `open ${item.name}`);
+
+                // If container is open and has items, add take commands
+                if (isOpen) {
+                    const state = this.getCurrentState();
+                    const contents = state.containers[item.id] || [];
+                    if (contents.length > 0) {
+                        for (const contentId of contents) {
+                            const contentItem = scene.objects?.[contentId];
+                            if (contentItem?.canTake) {
+                                commands.push(`take ${contentItem.name}`);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Add take command if item can be taken
+            if (item.canTake) {
+                commands.push(`take ${item.name}`);
+            }
+        }
+
+        // Add movement commands from available exits
+        const exits = this.sceneService.getAvailableExits(scene);
+        for (const exit of exits) {
+            commands.push(`go ${exit.direction}`);
+            // Add shorthand directions
+            commands.push(exit.direction);
+        }
+
+        // Remove duplicates and sort
+        return [...new Set(commands)].sort();
+    }
+
+    /**
+     * Get sidebar data combining all scene information
+     */
+    async getSidebarData(state: GameState): Promise<SidebarData> {
+        const scene = this.sceneService.getScene(state.currentScene);
+        if (!scene) {
+            return {
+                commands: '',
+                objects: '',
+                exits: '',
+                score: 0,
+                moves: 0
+            };
+        }
+
+        const knownItems = await this.getKnownItems(scene);
+        const availableCommands = await this.getAvailableCommands(scene);
+        const availableExits = this.sceneService.getAvailableExits(scene);
+
+        return {
+            commands: availableCommands.join('\n'),
+            objects: knownItems.map(obj => obj.name).join('\n'),
+            exits: availableExits.map(exit => 
+                exit.direction.charAt(0).toUpperCase() + exit.direction.slice(1)
+            ).join('\n'),
+            score: state.score,
+            moves: state.moves
+        };
     }
 }

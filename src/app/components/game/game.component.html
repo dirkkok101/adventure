@@ -1,27 +1,19 @@
-<div class="game-container full-height">
-    <h1 class="game-title">Text Adventure</h1>
-    <div class="game-main">
-        <app-game-output [gameText]="(gameText$ | async) || []"></app-game-output>
-    </div>
-    <div class="game-sidebar flex-column">
-        <div class="sidebar-content panel scrollable-content" *ngIf="sidebar$ | async as sidebar">
-            <div class="location">Location: {{ sidebar.location }}</div>
-            <div class="score">Score: {{ sidebar.score }}/{{ sidebar.maxScore }}</div>
-            <div class="turns">Turns: {{ sidebar.turns }}</div>
+<div class="container-fluid p-0">
+    <div class="row g-0">
+        <div class="col p-0">
+            <app-game-title [data]="sidebarData"></app-game-title>
         </div>
-        <div class="game-input">
-            <input class="input-field" 
-                   [(ngModel)]="userInput" 
-                   (keyup.enter)="onSubmit()"
-                   (keydown)="onKeyDown($event)"
-                   (input)="onInput()"
-                   placeholder="What do you want to do?"
-                   #inputField>
-            <div class="suggestions-dropdown scrollable-content" *ngIf="showSuggestions && suggestions.length > 0">
-                <div class="suggestion" *ngFor="let suggestion of suggestions">
-                    {{ suggestion }}
-                </div>
-            </div>
+    </div>
+    <div class="row g-0 flex-grow-1">
+        <div class="col p-0 game-main-window">
+            <app-game-output [gameText]="(gameText$ | async) || []"></app-game-output>
+            <app-game-input 
+                [availableCommands]="sidebarData?.commands?.split('\n') || []"
+                (commandEntered)="onCommandEntered($event)">
+            </app-game-input>
+        </div>
+        <div class="col-auto p-0 game-sidebar">
+            <app-game-sidebar [data]="sidebarData"></app-game-sidebar>
         </div>
     </div>
 </div>
