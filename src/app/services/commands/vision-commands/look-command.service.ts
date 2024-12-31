@@ -1,16 +1,15 @@
 import { Injectable } from '@angular/core';
-import { GameCommand, CommandResponse } from '../../models/game-state.model';
-import { GameStateService } from '../game-state.service';
-import { SceneService } from '../scene.service';
-import { StateMechanicsService } from '../mechanics/state-mechanics.service';
-import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
-import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
-import { LightMechanicsService } from '../mechanics/light-mechanics.service';
-import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
-import { ContainerMechanicsService } from '../mechanics/container-mechanics.service';
-import { ScoreMechanicsService } from '../mechanics/score-mechanics.service';
-import { GameTextService } from '../game-text.service';
-import { ExaminationBaseCommandService } from './bases/examination-base-command.service';
+import { GameCommand, CommandResponse, SceneObject } from '../../../models/game-state.model';
+import { GameStateService } from '../../game-state.service';
+import { SceneService } from '../../scene.service';
+import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
+import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.service';
+import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
+import { InventoryMechanicsService } from '../../mechanics/inventory-mechanics.service';
+import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
+import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
+import { GameTextService } from '../../game-text.service';
+import { ExaminationBaseCommandService } from '../bases/examination-base-command.service';
 
 @Injectable({
     providedIn: 'root'
@@ -19,7 +18,6 @@ export class LookCommandService extends ExaminationBaseCommandService {
     constructor(
         gameState: GameStateService,
         sceneService: SceneService,
-        stateMechanics: StateMechanicsService,
         flagMechanics: FlagMechanicsService,
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
@@ -31,7 +29,6 @@ export class LookCommandService extends ExaminationBaseCommandService {
         super(
             gameState,
             sceneService,
-            stateMechanics,
             flagMechanics,
             progress,
             lightMechanics,
@@ -74,30 +71,21 @@ export class LookCommandService extends ExaminationBaseCommandService {
             };
         }
 
-        // If looking at something specific, use examination base functionality
-        const object = await this.findObject(command.object);
-        if (!object) {
-            return {
-                success: false,
-                message: `You don't see any ${command.object} here.`,
-                incrementTurn: false
-            };
-        }
-
-        if (!await this.checkVisibility(object)) {
-            return {
-                success: false,
-                message: "It's too dark to see that.",
-                incrementTurn: false
-            };
-        }
-
-        const description = await this.getObjectDescription(object, false);
         return {
-            success: true,
-            message: description,
+            success: false,
+            message: "There is nothing to see here.",
             incrementTurn: true
         };
     }
 
+    override async getSuggestions(command: GameCommand): Promise<string[]> {
+        console.log('LookCommandService.getSuggestions called with:', command);
+        
+        if (!command.verb || !['look', 'l'].includes(command.verb)) {
+            return [];
+        }
+
+        // Only suggest the basic look command since we don't support looking at specific objects
+        return [command.verb];
+    }
 }

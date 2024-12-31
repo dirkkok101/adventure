@@ -3,7 +3,6 @@ import { GameCommand, SceneObject, CommandResponse } from '../../../models/game-
 import { BaseCommandService } from './base-command.service';
 import { GameStateService } from '../../game-state.service';
 import { SceneService } from '../../scene.service';
-import { StateMechanicsService } from '../../mechanics/state-mechanics.service';
 import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
 import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.service';
 import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
@@ -18,7 +17,6 @@ export abstract class ExaminationBaseCommandService extends BaseCommandService {
     constructor(
         gameState: GameStateService,
         sceneService: SceneService,
-        stateMechanics: StateMechanicsService,
         flagMechanics: FlagMechanicsService,
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
@@ -30,7 +28,6 @@ export abstract class ExaminationBaseCommandService extends BaseCommandService {
         super(
             gameState,
             sceneService,
-            stateMechanics,
             flagMechanics,
             progress,
             lightMechanics,
@@ -41,12 +38,6 @@ export abstract class ExaminationBaseCommandService extends BaseCommandService {
     }
 
     protected async getObjectDescription(object: SceneObject, detailed: boolean = false): Promise<string> {
-        // Try state-based interaction first
-        const action = detailed ? 'examine' : 'look';
-        const stateResult = await this.stateMechanics.handleInteraction(object, action);
-        if (stateResult.success) {
-            return stateResult.message;
-        }
 
         // Get base description based on examination type
         let description = detailed && object.descriptions.examine ? 
@@ -114,11 +105,7 @@ export abstract class ExaminationBaseCommandService extends BaseCommandService {
     }
 
     protected async handleExaminationScoring(object: SceneObject, detailed: boolean): Promise<void> {
-        await this.handleScoring({
-            action: detailed ? 'examine' : 'look',
-            object,
-            skipGeneralScore: !detailed // Only award general score for detailed examination
-        });
+
     }
 
     protected async getExaminableSuggestions(): Promise<string[]> {

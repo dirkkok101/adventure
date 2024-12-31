@@ -81,7 +81,8 @@ export class SceneService {
             return scene.descriptions.dark || this.gameText.get('scene.dark');
         }
 
-        // Get description based on state flags
+        // Get base description based on state flags
+        let description = '';
         if (scene.descriptions.states) {
             // Check each state description
             for (const [flagCombo, desc] of Object.entries(scene.descriptions.states)) {
@@ -94,15 +95,38 @@ export class SceneService {
                 });
 
                 if (matches) {
-                    return desc;
+                    description = desc;
+                    break;
                 }
             }
         }
 
-        // Return visited or default description
-        return scene.visited && scene.descriptions.visited ? 
-            scene.descriptions.visited : 
-            scene.descriptions.default;
+        // If no state description matched, use visited or default
+        if (!description) {
+            description = scene.visited && scene.descriptions.visited ? 
+                scene.descriptions.visited : 
+                scene.descriptions.default;
+        }
+
+        // Add visible objects to the description
+        const visibleObjects = this.getVisibleObjects(scene);
+        if (visibleObjects.length > 0) {
+            // Filter out objects that are in containers
+            const sceneState = state.sceneState[scene.id];
+            const looseObjects = visibleObjects.filter(obj => {
+                // Check if object is marked as revealed in scene state
+                return sceneState?.objects?.[obj.id]?.isRevealed;
+            });
+
+            if (looseObjects.length > 0) {
+                const objectNames = looseObjects
+                    .map(obj => obj.name.toLowerCase())
+                    .join(', ');
+                description += `\n\nYou can see: ${objectNames} here.`;
+            }
+        }
+
+        return description;
     }
 
     /**
@@ -113,12 +137,14 @@ export class SceneService {
         if (!scene.objects) return [];
 
         const state = this.gameState.getCurrentState();
+        const sceneState = state.sceneState[scene.id];
+
         return Object.values(scene.objects).filter(obj => {
             // Always show if visible on entry
             if (obj.visibleOnEntry) return true;
 
-            // Check if object has been revealed
-            return state.knownObjects.has(obj.id);
+            // Object must be both revealed in scene state and in knownObjects to be visible
+            return sceneState?.objects?.[obj.id]?.isRevealed === true && state.knownObjects.has(obj.id);
         });
     }
 
@@ -206,5 +232,244 @@ export class SceneService {
                 }
             }
         }));
+    }
+
+    /**
+     * Add an object to the current scene
+     * @param object Object to add to the scene
+     * @returns Success status and message
+     */
+    async addObjectToScene(object: SceneObject): Promise<{ success: boolean; message: string }> {
+        const scene = this.getCurrentScene();
+        if (!scene) {
+            return {
+                success: false,
+                message: 'No current scene'
+            };
+        }
+
+        // Add object to scene state
+        this.gameState.updateState(state => ({
+            ...state,
+            sceneState: {
+                ...state.sceneState,
+                [scene.id]: {
+                    ...state.sceneState[scene.id],
+                    objects: {
+                        ...state.sceneState[scene.id]?.objects,
+                        [object.id]: {
+                            ...state.sceneState[scene.id]?.objects?.[object.id],
+                            isRevealed: true
+                        }
+                    }
+                }
+            }
+        }));
+
+        // Add to scene objects
+        scene.objects = {
+            ...scene.objects,
+            [object.id]: object
+        };
+
+        return {
+            success: true,
+            message: `Added ${object.name} to scene`
+        };
+    }
+
+    /**
+     * Remove an object from the current scene
+     * @param objectId ID of object to remove
+     * @returns Success status and message
+     */
+    async removeObjectFromScene(objectId: string): Promise<{ success: boolean; message: string }> {
+        const scene = this.getCurrentScene();
+        if (!scene) {
+            return {
+                success: false,
+                message: 'No current scene'
+            };
+        }
+
+        // Check if object exists in scene
+        if (!scene.objects?.[objectId]) {
+            return {
+                success: false,
+                message: 'Object not found in scene'
+            };
+        }
+
+        // Remove object from scene state
+        this.gameState.updateState(state => {
+            const currentSceneState = state.sceneState[scene.id] || {
+                visited: false,
+                objects: {}
+            };
+
+            const { [objectId]: _, ...remainingObjects } = currentSceneState.objects;
+
+            return {
+                ...state,
+                sceneState: {
+                    ...state.sceneState,
+                    [scene.id]: {
+                        ...currentSceneState,
+                        objects: remainingObjects
+                    }
+                }
+            };
+        });
+
+        // Remove from scene objects
+        const { [objectId]: _, ...remainingObjects } = scene.objects;
+        scene.objects = remainingObjects;
+
+        return {
+            success: true,
+            message: 'Object removed from scene'
+        };
+    }
+
+    /**
+     * Find an exit in the current scene by its direction or by an object name (like "door")
+     * @param nameOrDirection Name or direction of the exit to find
+     * @returns The exit if found, null otherwise
+     */
+    findExit(nameOrDirection: string): SceneExit | null {
+        const scene = this.getCurrentScene();
+        if (!scene?.exits) return null;
+
+        // First try to find by direction
+        const exit = scene.exits.find(e => e.direction.toLowerCase() === nameOrDirection.toLowerCase());
+        if (exit) return exit;
+
+        // Then try to find by name in the description
+        const byName = scene.exits.find(e => e.description.toLowerCase().includes(nameOrDirection.toLowerCase()));
+        return byName || null;
+    }
+
+    /**
+     * Open an exit in the current scene
+     * @param exit Exit to open
+     * @returns Success status and message
+     */
+    async openExit(exit: SceneExit): Promise<{ success: boolean; message: string; score?: number }> {
+        if (!exit.isOpenable) {
+            return { 
+                success: false, 
+                message: `You can't open that.` 
+            };
+        }
+
+        if (exit.isLocked) {
+            return { 
+                success: false, 
+                message: exit.failedOpenMessage || `It's locked.` 
+            };
+        }
+
+        const currentState = this.isExitOpen(exit);
+        if (currentState) {
+            return { 
+                success: false, 
+                message: `It's already open.` 
+            };
+        }
+
+        // Update scene state
+        this.gameState.updateState(state => {
+            const scene = this.getCurrentScene();
+            if (!scene) return state;
+
+            return {
+                ...state,
+                sceneState: {
+                    ...state.sceneState,
+                    [scene.id]: {
+                        ...state.sceneState[scene.id],
+                        exits: {
+                            ...state.sceneState[scene.id]?.exits,
+                            [exit.direction]: {
+                                ...state.sceneState[scene.id]?.exits?.[exit.direction],
+                                isOpen: true
+                            }
+                        }
+                    }
+                }
+            };
+        });
+
+        return { 
+            success: true, 
+            message: exit.openMessage || `You open the ${exit.description}.`,
+            score: exit.scoring?.open
+        };
+    }
+
+    /**
+     * Close an exit in the current scene
+     * @param exit Exit to close
+     * @returns Success status and message
+     */
+    async closeExit(exit: SceneExit): Promise<{ success: boolean; message: string; score?: number }> {
+        if (!exit.isOpenable) {
+            return { 
+                success: false, 
+                message: `You can't close that.` 
+            };
+        }
+
+        const currentState = this.isExitOpen(exit);
+        if (!currentState) {
+            return { 
+                success: false, 
+                message: `It's already closed.` 
+            };
+        }
+
+        // Update scene state
+        this.gameState.updateState(state => {
+            const scene = this.getCurrentScene();
+            if (!scene) return state;
+
+            return {
+                ...state,
+                sceneState: {
+                    ...state.sceneState,
+                    [scene.id]: {
+                        ...state.sceneState[scene.id],
+                        exits: {
+                            ...state.sceneState[scene.id]?.exits,
+                            [exit.direction]: {
+                                ...state.sceneState[scene.id]?.exits?.[exit.direction],
+                                isOpen: false
+                            }
+                        }
+                    }
+                }
+            };
+        });
+
+        return { 
+            success: true, 
+            message: exit.closeMessage || `You close the ${exit.description}.`,
+            score: exit.scoring?.close
+        };
+    }
+
+    /**
+     * Check if an exit is currently open
+     * @param exit Exit to check
+     * @returns Whether the exit is open
+     */
+    isExitOpen(exit: SceneExit): boolean {
+        if (!exit.isOpenable) return true; // Non-openable exits are always "open"
+        
+        const scene = this.getCurrentScene();
+        if (!scene) return false;
+
+        const state = this.gameState.getCurrentState();
+        return state.sceneState[scene.id]?.exits?.[exit.direction]?.isOpen ?? exit.isOpen ?? false;
     }
 }

@@ -1,18 +1,17 @@
 import { Injectable } from '@angular/core';
 import { GameCommand } from '../../models/game-state.model';
-import { MovementCommandService } from './movement-command.service';
-import { InventoryCommandService } from './inventory-command.service';
-import { DropCommandService } from './drop-command.service';
-import { LookCommandService } from './look-command.service';
-import { ExamineCommandService } from './examine-command.service';
-import { OpenCloseCommandService } from './open-close-command.service';
-import { TakeCommandService } from './take-command.service';
-import { PutCommandService } from './put-command.service';
-import { ReadCommandService } from './read-command.service';
-import { TurnCommandService } from './turn-command.service';
-import { ClimbCommandService } from './climb-command.service';
+import { MovementCommandService } from './navigation-commands/movement-command.service';
+import { InventoryCommandService } from './container-commands/inventory-command.service';
+import { DropObjectCommandService } from './object-commands/drop-object-command.service';
+import { LookCommandService } from './vision-commands/look-command.service';
+import { ExamineCommandService } from './vision-commands/examine-command.service';
+import { OpenCloseContainerCommandService } from './container-commands/open-close-container-command.service';
+import { TakeObjectCommandService } from './object-commands/take-object-command.service';
+import { PutCommandService } from './container-commands/put-command.service';
+import { ReadObjectCommandService } from './object-commands/read-object-command.service';
+import { TurnLightSourceOnOffCommandService } from './light-source-commands/turn-light-source-on-off-command.service';
+import { ClimbCommandService } from './navigation-commands/climb-command.service';
 import { GameTextService } from '../game-text.service';
-import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
 
 interface CommandHandler {
     canHandle(command: GameCommand): boolean;
@@ -41,7 +40,6 @@ const VERB_ALIASES: { [key: string]: string } = {
     'get': 'take',
     'grab': 'take',
     'place': 'put',
-    'read': 'examine',
     'check': 'examine',
     'go': 'enter'
 };
@@ -55,18 +53,21 @@ export class CommandService {
     constructor(
         private movement: MovementCommandService,
         private inventory: InventoryCommandService,
-        private drop: DropCommandService,
+        private drop: DropObjectCommandService,
         private look: LookCommandService,
         private examine: ExamineCommandService,
-        private openClose: OpenCloseCommandService,
-        private take: TakeCommandService,
+        private openClose: OpenCloseContainerCommandService,
+        private take: TakeObjectCommandService,
         private put: PutCommandService,
-        private read: ReadCommandService,
-        private turn: TurnCommandService,
+        private read: ReadObjectCommandService,
+        private turn: TurnLightSourceOnOffCommandService,
         private climb: ClimbCommandService,
         private gameText: GameTextService,
-        private progress: ProgressMechanicsService
     ) {
+        console.log('CommandService constructor - injected services:', {
+            movement, inventory, drop, look, examine, openClose, take, put, read, turn, climb
+        });
+
         // Only add handlers that implement the CommandHandler interface
         this.commandHandlers = [
             movement,
@@ -83,6 +84,15 @@ export class CommandService {
         ].filter(handler => 
             typeof handler.canHandle === 'function' && 
             typeof handler.handle === 'function'
+        );
+        
+        console.log('Registered command handlers:', 
+            this.commandHandlers.map(h => ({
+                name: h.constructor.name,
+                hasCanHandle: typeof h.canHandle === 'function',
+                hasHandle: typeof h.handle === 'function',
+                hasGetSuggestions: typeof h.getSuggestions === 'function'
+            }))
         );
     }
 
@@ -110,9 +120,6 @@ export class CommandService {
             if (handler.canHandle(command)) {
                 try {
                     const result = await handler.handle(command);
-                    if (result.incrementTurn) {
-                        this.progress.incrementTurns();
-                    }
                     return result;
                 } catch (error) {
                     console.error('Error handling command:', error);
@@ -133,55 +140,38 @@ export class CommandService {
     }
 
     parseCommand(input: string): GameCommand | null {
+        console.log('CommandService.parseCommand called with:', input);
         if (!input) return null;
 
-        const words = input.trim().toLowerCase().split(/\s+/);
-        if (words.length === 0) return null;
-
-        const verb = words[0];
-        let object: string | undefined;
-        let preposition: string | undefined;
-        let indirect: string | undefined;
-
-        // Handle single word commands (look, inventory, etc.)
-        if (words.length === 1) {
-            return { verb, originalInput: input };
-        }
-
-        // Handle direction aliases
+        const parts = input.toLowerCase().trim().split(/\s+/);
+        let verb = parts[0];
+        
+        // Check for direction shortcuts
         if (DIRECTIONS.has(verb)) {
-            return { verb, originalInput: input };
-        }
-
-        // Look for prepositions
-        const prepositions = ['in', 'on', 'at', 'to', 'with', 'under', 'behind', 'through'];
-        const prepIndex = words.findIndex((word, index) => index > 0 && prepositions.includes(word));
-
-        if (prepIndex !== -1) {
-            // Words between verb and preposition form the object
-            object = words.slice(1, prepIndex).join(' ');
-            preposition = words[prepIndex];
-            // Words after preposition form the indirect object
-            if (prepIndex < words.length - 1) {
-                indirect = words.slice(prepIndex + 1).join(' ');
-            }
+            console.log('Found direction shortcut:', verb);
+            verb = 'go';
         } else {
-            // No preposition found, all words after verb form the object
-            object = words.slice(1).join(' ');
+            // Check verb aliases
+            const aliasedVerb = VERB_ALIASES[verb];
+            console.log('Checking verb alias:', verb, '->', aliasedVerb);
+            verb = aliasedVerb || verb;
         }
-
-        return {
+        
+        const command: GameCommand = {
             verb,
-            object,
-            preposition,
-            indirect,
+            object: parts.slice(1).join(' '),
             originalInput: input
         };
+        console.log('Parsed command:', command);
+        return command;
     }
 
     async getSuggestions(input: string): Promise<string[]> {
+        console.log('CommandService.getSuggestions called with:', input);
         const command = this.parseCommand(input.toLowerCase());
+        console.log('Parsed command:', command);
         if (!command) {
+            console.log('No command parsed, returning empty suggestions');
             return [];
         }
 
@@ -189,17 +179,29 @@ export class CommandService {
 
         // Add basic verb suggestions if no verb or very short input
         if (!command.object && (!command.verb || input.length <= 2)) {
+            console.log('Adding basic verb suggestions');
             suggestions.push(...Object.keys(VERB_ALIASES));
             suggestions.push(...DIRECTIONS);
         }
 
         // Add context-specific suggestions from handlers
+        console.log('Getting suggestions from handlers for command:', command);
         const handlerSuggestions = await Promise.all(
             this.commandHandlers
-                .filter(handler => handler.getSuggestions)
+                .filter(handler => {
+                    console.log('Checking if handler has getSuggestions:', handler.constructor.name, !!handler.getSuggestions);
+                    return handler.getSuggestions;
+                })
+                .filter(handler => {
+                    const canHandle = handler.canHandle(command);
+                    console.log('Checking if handler can handle command:', handler.constructor.name, canHandle);
+                    return canHandle;
+                })
                 .map(async handler => {
                     try {
+                        console.log('Getting suggestions from handler:', handler.constructor.name);
                         const result = await handler.getSuggestions!(command);
+                        console.log('Handler suggestions:', handler.constructor.name, result);
                         return result;
                     } catch (error) {
                         console.error('Error getting suggestions:', error);
@@ -209,11 +211,14 @@ export class CommandService {
         );
 
         // Flatten all suggestions into a single array
+        console.log('Flattening handler suggestions:', handlerSuggestions);
         suggestions.push(...handlerSuggestions.flat());
 
         // Filter suggestions to match input
-        return [...new Set(suggestions)]
+        const filteredSuggestions = [...new Set(suggestions)]
             .filter(s => s.toLowerCase().startsWith(input.toLowerCase()))
             .sort();
+        console.log('Final suggestions:', filteredSuggestions);
+        return filteredSuggestions;
     }
 }

@@ -3,7 +3,6 @@ import { GameCommand, SceneExit, CommandResponse } from '../../../models/game-st
 import { BaseCommandService } from './base-command.service';
 import { GameStateService } from '../../game-state.service';
 import { SceneService } from '../../scene.service';
-import { StateMechanicsService } from '../../mechanics/state-mechanics.service';
 import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
 import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.service';
 import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
@@ -31,7 +30,6 @@ export abstract class MovementBaseCommandService extends BaseCommandService {
     constructor(
         gameState: GameStateService,
         sceneService: SceneService,
-        stateMechanics: StateMechanicsService,
         flagMechanics: FlagMechanicsService,
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
@@ -42,7 +40,6 @@ export abstract class MovementBaseCommandService extends BaseCommandService {
         super(
             gameState,
             sceneService,
-            stateMechanics,
             flagMechanics,
             progress,
             lightMechanics,
@@ -141,44 +138,6 @@ export abstract class MovementBaseCommandService extends BaseCommandService {
             success: true,
             message: description,
             incrementTurn: true
-        };
-    }
-
-    protected async handleObjectMovement(objectName: string): Promise<CommandResponse> {
-        const scene = this.sceneService.getCurrentScene();
-        if (!scene) {
-            return this.noSceneError();
-        }
-
-        // Check if we can see
-        if (!this.checkLightInScene()) {
-            return {
-                success: false,
-                message: "It's too dark to see where you're going.",
-                incrementTurn: false
-            };
-        }
-
-        // Find the object
-        const object = Object.values(scene.objects || {}).find(obj => 
-            obj.name.toLowerCase() === objectName.toLowerCase() && 
-            this.lightMechanics.isObjectVisible(obj)
-        );
-
-        if (!object) {
-            return {
-                success: false,
-                message: `You don't see any ${objectName} here.`,
-                incrementTurn: false
-            };
-        }
-
-        // Handle interaction using state mechanics
-        const result = await this.stateMechanics.handleInteraction(object, 'enter');
-        return {
-            success: result.success,
-            message: result.message,
-            incrementTurn: result.success
         };
     }
 

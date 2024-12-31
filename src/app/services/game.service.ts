@@ -94,12 +94,10 @@ export class GameService {
     }
 
     async getSuggestions(input: string): Promise<string[]> {
-        try {
-            return await this.commandService.getSuggestions(input);
-        } catch (error) {
-            console.error('Error getting suggestions:', error);
-            return [];
-        }
+        console.log('GameService.getSuggestions called with:', input);
+        const suggestions = await this.commandService.getSuggestions(input);
+        console.log('GameService.getSuggestions got suggestions:', suggestions);
+        return suggestions;
     }
 
     async startNewGame(): Promise<void> {

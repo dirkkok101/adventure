@@ -1,35 +1,38 @@
 import { Injectable } from '@angular/core';
-import { GameCommand, SceneObject } from '../../models/game-state.model';
-import { BaseObjectCommandService } from './base-object-command.service';
-import { GameStateService } from '../game-state.service';
-import { SceneService } from '../scene.service';
-import { LightMechanicsService } from '../mechanics/light-mechanics.service';
-import { StateMechanicsService } from '../mechanics/state-mechanics.service';
-import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
-import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
-import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
+import { GameCommand, SceneObject } from '../../../models/game-state.model';
+import { GameStateService } from '../../game-state.service';
+import { SceneService } from '../../scene.service';
+import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
+import { InventoryMechanicsService } from '../../mechanics/inventory-mechanics.service';
+import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
+import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.service';
+import { BaseCommandService } from '../bases/base-command.service';
+import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
+import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
 
 @Injectable({
     providedIn: 'root'
 })
-export class TurnCommandService extends BaseObjectCommandService {
+export class TurnLightSourceOnOffCommandService extends BaseCommandService {
     constructor(
         gameState: GameStateService,
         sceneService: SceneService,
-        stateMechanics: StateMechanicsService,
         flagMechanics: FlagMechanicsService,
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
-        inventoryMechanics: InventoryMechanicsService
+        inventoryMechanics: InventoryMechanicsService,
+        scoreMechanics: ScoreMechanicsService,
+        containerMechanics: ContainerMechanicsService
     ) {
         super(
             gameState,
             sceneService,
-            stateMechanics,
             flagMechanics,
             progress,
             lightMechanics,
-            inventoryMechanics
+            inventoryMechanics,
+            scoreMechanics,
+            containerMechanics
         );
     }
 
@@ -93,19 +96,6 @@ export class TurnCommandService extends BaseObjectCommandService {
                 message: `You need to take the ${object.name} first.`,
                 incrementTurn: false
             };
-        }
-
-        // Try state-based interaction first
-        const stateResult = await this.stateMechanics.handleInteraction(object, `turn_${command.preposition}`);
-        if (stateResult.success) {
-            // If this is a light source, update light state
-            if (object.providesLight) {
-                const lightResult = this.lightMechanics.handleLightSource(object.id, command.preposition === 'on');
-                if (!lightResult.success) {
-                    return { ...lightResult, incrementTurn: false };
-                }
-            }
-            return { ...stateResult, incrementTurn: true };
         }
 
         // Handle default turn behavior for light sources

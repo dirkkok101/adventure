@@ -1,16 +1,15 @@
 import { Injectable } from '@angular/core';
-import { GameCommand, SceneObject, CommandResponse } from '../../models/game-state.model';
-import { ContainerBaseCommandService } from './bases/container-base-command.service';
-import { GameStateService } from '../game-state.service';
-import { SceneService } from '../scene.service';
-import { StateMechanicsService } from '../mechanics/state-mechanics.service';
-import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
-import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
-import { LightMechanicsService } from '../mechanics/light-mechanics.service';
-import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
-import { ContainerMechanicsService } from '../mechanics/container-mechanics.service';
-import { ScoreMechanicsService } from '../mechanics/score-mechanics.service';
-import { GameTextService } from '../game-text.service';
+import { GameCommand, SceneObject, CommandResponse } from '../../../models/game-state.model';
+import { ContainerBaseCommandService } from '../bases/container-base-command.service';
+import { GameStateService } from '../../game-state.service';
+import { SceneService } from '../../scene.service';
+import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
+import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.service';
+import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
+import { InventoryMechanicsService } from '../../mechanics/inventory-mechanics.service';
+import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
+import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
+import { GameTextService } from '../../game-text.service';
 
 @Injectable({
     providedIn: 'root'
@@ -19,7 +18,6 @@ export class PutCommandService extends ContainerBaseCommandService {
     constructor(
         gameState: GameStateService,
         sceneService: SceneService,
-        stateMechanics: StateMechanicsService,
         flagMechanics: FlagMechanicsService,
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
@@ -31,7 +29,6 @@ export class PutCommandService extends ContainerBaseCommandService {
         super(
             gameState,
             sceneService,
-            stateMechanics,
             flagMechanics,
             progress,
             lightMechanics,

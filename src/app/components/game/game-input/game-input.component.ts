@@ -1,6 +1,7 @@
 import { Component, ElementRef, EventEmitter, Input, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { GameService } from '../../../services/game.service';
 
 @Component({
   selector: 'app-game-input',
@@ -19,14 +20,17 @@ export class GameInputComponent {
   commandHistory: string[] = [];
   currentHistoryIndex = -1;
 
-  onInput(event: Event): void {
+  constructor(private gameService: GameService) {}
+
+  async onInput(event: Event): Promise<void> {
     const input = (event.target as HTMLInputElement).value.toLowerCase();
     this.currentInput = input;
     
     if (input) {
-      this.filteredCommands = this.availableCommands
-        .filter(cmd => cmd.toLowerCase().includes(input))
-        .slice(0, 10); // Limit to 10 suggestions
+      console.log('Getting suggestions for:', input);
+      const suggestions = await this.gameService.getSuggestions(input);
+      console.log('Got suggestions:', suggestions);
+      this.filteredCommands = suggestions.slice(0, 10); // Limit to 10 suggestions
     } else {
       this.filteredCommands = [];
     }
@@ -54,7 +58,11 @@ export class GameInputComponent {
       case 'Enter':
         event.preventDefault();
         if (this.currentInput.trim()) {
-          this.sendCommand(this.currentInput.trim());
+          this.commandEntered.emit(this.currentInput);
+          this.commandHistory.push(this.currentInput);
+          this.currentHistoryIndex = this.commandHistory.length;
+          this.currentInput = '';
+          this.filteredCommands = [];
         }
         break;
       case 'Tab':
@@ -71,16 +79,8 @@ export class GameInputComponent {
 
   selectSuggestion(command: string): void {
     this.currentInput = command;
-    this.sendCommand(command);
-    this.gameInput.nativeElement.focus();
-  }
-
-  private sendCommand(command: string): void {
-    this.commandEntered.emit(command);
-    this.commandHistory.push(command);
-    this.currentHistoryIndex = this.commandHistory.length;
-    this.currentInput = '';
     this.filteredCommands = [];
+    this.gameInput.nativeElement.focus();
   }
 
   focus(): void {

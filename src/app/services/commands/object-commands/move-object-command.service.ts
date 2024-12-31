@@ -1,37 +1,33 @@
 import { Injectable } from '@angular/core';
-import { GameCommand, SceneObject, CommandResponse } from '../../models/game-state.model';
-import { MovementBaseCommandService } from './bases/movement-base-command.service';
-import { GameStateService } from '../game-state.service';
-import { SceneService } from '../scene.service';
-import { StateMechanicsService } from '../mechanics/state-mechanics.service';
-import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
-import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
-import { LightMechanicsService } from '../mechanics/light-mechanics.service';
-import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
-import { ScoreMechanicsService } from '../mechanics/score-mechanics.service';
-import { GameTextService } from '../game-text.service';
-import { ContainerMechanicsService } from '../mechanics/container-mechanics.service';
+import { GameCommand, SceneObject, CommandResponse } from '../../../models/game-state.model';
+import { GameStateService } from '../../game-state.service';
+import { SceneService } from '../../scene.service';
+
+import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
+import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.service';
+import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
+import { InventoryMechanicsService } from '../../mechanics/inventory-mechanics.service';
+import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
+import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
+import { BaseCommandService } from '../bases/base-command.service';
 
 @Injectable({
     providedIn: 'root'
 })
-export class MoveCommandService extends MovementBaseCommandService {
+export class MoveObjectCommandService extends BaseCommandService {
     constructor(
         gameState: GameStateService,
         sceneService: SceneService,
-        stateMechanics: StateMechanicsService,
         flagMechanics: FlagMechanicsService,
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
         inventoryMechanics: InventoryMechanicsService,
         scoreMechanics: ScoreMechanicsService,
-        private gameTextService: GameTextService,
         containerMechanics: ContainerMechanicsService
     ) {
         super(
             gameState,
             sceneService,
-            stateMechanics,
             flagMechanics,
             progress,
             lightMechanics,
@@ -57,7 +53,7 @@ export class MoveCommandService extends MovementBaseCommandService {
         return this.handleObjectMovement(command.object);
     }
 
-    protected override async handleObjectMovement(objectName: string): Promise<CommandResponse> {
+    protected async handleObjectMovement(objectName: string): Promise<CommandResponse> {
         const object = await this.findObject(objectName);
         if (!object) {
             return {

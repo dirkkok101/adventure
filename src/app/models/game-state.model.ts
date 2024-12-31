@@ -21,7 +21,13 @@ export interface GameState {
                     isLocked?: boolean;
                     isRevealed?: boolean;
                 }
-            }
+            };
+            exits?: { // Track exit-specific state
+                [direction: string]: {
+                    isOpen?: boolean;
+                    isLocked?: boolean;
+                }
+            };
         }
     };
 }
@@ -72,6 +78,8 @@ export interface SceneObject {
         drop?: number; // Score for dropping in the right place
         take?: number; // Score for taking the object
         use?: number; // Score for using the object correctly
+        open?: number; // Score for opening the object
+        close?: number; // Score for closing the object
         containerTargets?: { // Specific containers that give points when object is placed in them
             [containerId: string]: number;
         };
@@ -86,6 +94,17 @@ export interface SceneExit {
     failureMessage?: string;
     score?: number; // Score for discovering new areas
     oneWay?: boolean; // Whether you can return this way
+    isOpenable?: boolean; // Whether this exit can be opened/closed (like a door)
+    isOpen?: boolean; // Whether the exit is currently open
+    isLocked?: boolean; // Whether the exit is locked
+    openMessage?: string; // Message when opening the exit
+    closeMessage?: string; // Message when closing the exit
+    failedOpenMessage?: string; // Message when failing to open (e.g. locked)
+    failedCloseMessage?: string; // Message when failing to close
+    scoring?: {
+        open?: number; // Score for opening the exit
+        close?: number; // Score for closing the exit
+    };
 }
 
 export interface SceneInteraction {

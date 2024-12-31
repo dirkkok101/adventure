@@ -1,37 +1,38 @@
 import { Injectable } from '@angular/core';
-import { GameCommand, SceneObject, CommandResponse } from '../../models/game-state.model';
-import { BaseObjectCommandService } from './base-object-command.service';
-import { GameStateService } from '../game-state.service';
-import { SceneService } from '../scene.service';
-import { StateMechanicsService } from '../mechanics/state-mechanics.service';
-import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
-import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
-import { LightMechanicsService } from '../mechanics/light-mechanics.service';
-import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
-import { GameTextService } from '../game-text.service';
+import { GameCommand, SceneObject, CommandResponse } from '../../../models/game-state.model';
+import { GameStateService } from '../../game-state.service';
+import { SceneService } from '../../scene.service';
+import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
+import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.service';
+import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
+import { InventoryMechanicsService } from '../../mechanics/inventory-mechanics.service';
+import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
+import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
+import { BaseCommandService } from '../bases/base-command.service';
 
 @Injectable({
     providedIn: 'root'
 })
-export class InventoryCommandService extends BaseObjectCommandService {
+export class InventoryCommandService extends BaseCommandService {
     constructor(
         gameState: GameStateService,
         sceneService: SceneService,
-        stateMechanics: StateMechanicsService,
         flagMechanics: FlagMechanicsService,
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
         inventoryMechanics: InventoryMechanicsService,
-        private gameText: GameTextService
+        scoreMechanics: ScoreMechanicsService,
+        containerMechanics: ContainerMechanicsService
     ) {
         super(
             gameState,
             sceneService,
-            stateMechanics,
             flagMechanics,
             progress,
             lightMechanics,
-            inventoryMechanics
+            inventoryMechanics,
+            scoreMechanics,
+            containerMechanics
         );
     }
 
@@ -62,24 +63,10 @@ export class InventoryCommandService extends BaseObjectCommandService {
         }
 
         // Build inventory list with descriptions
-        const itemDescriptions = await Promise.all(items.map(async item => {
-            // Check if item has a special state description
-            const stateResult = await this.stateMechanics.handleInteraction(item, 'examine');
-            if (stateResult.success) {
-                return `- ${item.name}: ${stateResult.message}`;
-            }
+        const itemDescriptions = items.map(item => {
+            return `${item.name}: ${item.descriptions}`;
+        });
 
-            // Check if item is a container and has contents
-            const contents = await this.inventoryMechanics.getContainerContents(item.id);
-            if (contents && contents.length > 0) {
-                const contentItems = await Promise.all(contents.map(id => this.sceneService.findObject(id)));
-                const contentNames = contentItems.filter(Boolean).map(obj => obj?.name).join(', ');
-                return `- ${item.name} (containing: ${contentNames})`;
-            }
-
-            // Default case - just show the item name
-            return `- ${item.name}`;
-        }));
 
         // Calculate total weight if weight tracking is enabled
         const totalWeight = await this.inventoryMechanics.getCurrentWeight();

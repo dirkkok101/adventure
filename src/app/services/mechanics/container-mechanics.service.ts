@@ -109,7 +109,42 @@ export class ContainerMechanicsService {
             return { success: false, message: 'It is locked.' };
         }
 
+        // Set container as open
         this.flagMechanics.setContainerOpen(container.id, true);
+
+        // Get the current scene
+        const scene = this.sceneService.getCurrentScene();
+        if (scene) {
+            // Mark all contents as revealed
+            const contents = await this.getContainerContents(container.id);
+            
+            // Update scene state and add to known objects
+            this.gameState.updateState(state => ({
+                ...state,
+                knownObjects: new Set([...state.knownObjects, ...contents]),
+                sceneState: {
+                    ...state.sceneState,
+                    [scene.id]: {
+                        ...state.sceneState[scene.id],
+                        objects: {
+                            ...state.sceneState[scene.id]?.objects,
+                            [container.id]: {
+                                ...state.sceneState[scene.id]?.objects?.[container.id],
+                                isOpen: true
+                            },
+                            ...contents.reduce((acc, itemId) => ({
+                                ...acc,
+                                [itemId]: {
+                                    ...state.sceneState[scene.id]?.objects?.[itemId],
+                                    isRevealed: true
+                                }
+                            }), {})
+                        }
+                    }
+                }
+            }));
+        }
+
         return { success: true, message: `You open the ${container.name}.` };
     }
 
@@ -122,7 +157,47 @@ export class ContainerMechanicsService {
             return { success: false, message: 'It is already closed.' };
         }
 
+        // Set container as closed
         this.flagMechanics.setContainerOpen(container.id, false);
+
+        // Get the current scene
+        const scene = this.sceneService.getCurrentScene();
+        if (scene) {
+            // Mark all contents as not revealed
+            const contents = await this.getContainerContents(container.id);
+            
+            // Update scene state and remove from known objects
+            this.gameState.updateState(state => {
+                const newKnownObjects = new Set(state.knownObjects);
+                contents.forEach(id => newKnownObjects.delete(id));
+
+                return {
+                    ...state,
+                    knownObjects: newKnownObjects,
+                    sceneState: {
+                        ...state.sceneState,
+                        [scene.id]: {
+                            ...state.sceneState[scene.id],
+                            objects: {
+                                ...state.sceneState[scene.id]?.objects,
+                                [container.id]: {
+                                    ...state.sceneState[scene.id]?.objects?.[container.id],
+                                    isOpen: false
+                                },
+                                ...contents.reduce((acc, itemId) => ({
+                                    ...acc,
+                                    [itemId]: {
+                                        ...state.sceneState[scene.id]?.objects?.[itemId],
+                                        isRevealed: false
+                                    }
+                                }), {})
+                            }
+                        }
+                    }
+                };
+            });
+        }
+
         return { success: true, message: `You close the ${container.name}.` };
     }
 

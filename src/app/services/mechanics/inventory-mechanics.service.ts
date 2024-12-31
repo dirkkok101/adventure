@@ -76,7 +76,15 @@ export class InventoryMechanicsService {
                 return { success: false, message: `You can't take the ${object.name}.` };
             }
 
-            await this.addToInventory(object.id);
+            // Add to inventory
+            this.gameState.updateState(state => ({
+                ...state,
+                inventory: {
+                    ...state.inventory,
+                    [object.id]: true
+                }
+            }));
+
             await this.gameState.addKnownObject(object.id);
 
             if (object.interactions?.['take']?.message) {
@@ -90,43 +98,44 @@ export class InventoryMechanicsService {
         }
     }
 
+    /**
+     * Drop an object from inventory into the current scene
+     * @param object Object to drop
+     * @returns Success status and message
+     */
     async dropObject(object: SceneObject): Promise<{ success: boolean; message: string }> {
-        try {
-            if (!await this.hasItem(object.id)) {
-                return { success: false, message: `You don't have the ${object.name}.` };
-            }
-
-            await this.removeFromInventory(object.id);
-
-            if (object.interactions?.['drop']?.message) {
-                return { success: true, message: object.interactions['drop'].message };
-            }
-
-            return { success: true, message: `You drop the ${object.name}.` };
-        } catch (error) {
-            console.error('Error dropping object:', error);
-            return { success: false, message: 'An error occurred while dropping the object.' };
+        if (!await this.hasItem(object.id)) {
+            return { 
+                success: false, 
+                message: `You don't have the ${object.name}.` 
+            };
         }
+
+        // Remove from inventory
+        this.gameState.updateState(state => ({
+            ...state,
+            inventory: {
+                ...state.inventory,
+                [object.id]: false
+            }
+        }));
+
+        return { 
+            success: true, 
+            message: `You drop the ${object.name}.` 
+        };
     }
 
     listInventory(): string[] {
-        try {
-            const state = this.gameState.getCurrentState();
-            return Object.keys(state.inventory || {});
-        } catch (error) {
-            console.error('Error listing inventory:', error);
-            return [];
-        }
+        const state = this.gameState.getCurrentState();
+        return Object.entries(state.inventory)
+            .filter(([_, isHeld]) => isHeld)
+            .map(([id]) => id);
     }
 
     async hasItem(objectId: string): Promise<boolean> {
-        try {
-            const state = this.gameState.getCurrentState();
-            return !!state.inventory?.[objectId];
-        } catch (error) {
-            console.error('Error checking if has item:', error);
-            return false;
-        }
+        const state = this.gameState.getCurrentState();
+        return state.inventory[objectId] === true;
     }
 
     async addToInventory(itemId: string): Promise<void> {
@@ -147,14 +156,13 @@ export class InventoryMechanicsService {
 
     async removeFromInventory(itemId: string): Promise<void> {
         try {
-            this.gameState.updateState(state => {
-                const inventory = state.inventory || {};
-                const { [itemId]: _, ...remainingInventory } = inventory;
-                return {
-                    ...state,
-                    inventory: remainingInventory
-                };
-            });
+            this.gameState.updateState(state => ({
+                ...state,
+                inventory: {
+                    ...state.inventory,
+                    [itemId]: false
+                }
+            }));
         } catch (error) {
             console.error('Error removing from inventory:', error);
             this.gameText.addText('An error occurred while removing the item from inventory.');

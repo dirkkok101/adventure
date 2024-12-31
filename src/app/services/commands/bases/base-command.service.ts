@@ -2,7 +2,6 @@ import { Injectable } from '@angular/core';
 import { GameCommand, SceneObject, CommandResponse } from '../../../models/game-state.model';
 import { GameStateService } from '../../game-state.service';
 import { SceneService } from '../../scene.service';
-import { StateMechanicsService } from '../../mechanics/state-mechanics.service';
 import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
 import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.service';
 import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
@@ -16,7 +15,6 @@ export abstract class BaseCommandService implements ICommandService {
     constructor(
         protected gameState: GameStateService,
         protected sceneService: SceneService,
-        protected stateMechanics: StateMechanicsService,
         protected flagMechanics: FlagMechanicsService,
         protected progress: ProgressMechanicsService,
         protected lightMechanics: LightMechanicsService,
@@ -26,63 +24,16 @@ export abstract class BaseCommandService implements ICommandService {
     ) {}
 
     abstract canHandle(command: GameCommand): boolean;
+
     abstract handle(command: GameCommand): Promise<CommandResponse>;
 
-    /**
-     * Get suggestions for command completion
-     * @param command The current command being typed
-     * @returns Array of suggestions
-     */
-    async getSuggestions(command: GameCommand): Promise<string[]> {
-        // Only suggest objects if we have a verb
-        if (!command.verb) {
-            return [];
-        }
-
-        const scene = this.sceneService.getCurrentScene();
-        if (!scene?.objects) return [];
-
-        const suggestions = new Set<string>();
-        const state = this.gameState.getCurrentState();
-
-        // Add visible objects from scene that aren't in closed containers
-        for (const obj of Object.values(scene.objects)) {
-            // Skip if not visible and not in inventory
-            if (!this.lightMechanics.isObjectVisible(obj) && !state.inventory[obj.id]) {
-                continue;
-            }
-
-            // Skip if in a closed container
-            const container = this.containerMechanics.findContainerWithItem(obj.id);
-            if (container && !this.containerMechanics.isOpen(container.id)) {
-                continue;
-            }
-
-            suggestions.add(obj.name.toLowerCase());
-        }
-
-        return Array.from(suggestions);
-    }
-
-    protected async handleScoring({ action, object, container, skipGeneralScore = false }: ScoringOptions): Promise<void> {
-        await this.scoreMechanics.handleObjectScoring(
-            { action, object, container, skipGeneralScore },
-            this.flagMechanics
-        );
-    }
-
     protected async checkVisibility(object: SceneObject): Promise<boolean> {
-        if (!this.lightMechanics.isLightPresent()) {
-            return false;
-        }
         return this.lightMechanics.isObjectVisible(object) || await this.inventoryMechanics.hasItem(object.id);
     }
 
     protected checkLightInScene(): boolean {
         const scene = this.sceneService.getCurrentScene();
-        if (!scene) return false;
-        
-        return this.lightMechanics.isLightPresent() || !!scene.light;
+        return scene ? (this.lightMechanics.isLightPresent() || !!scene.light) : false;
     }
 
     protected async findObject(objectName: string): Promise<SceneObject | null> {
@@ -92,7 +43,7 @@ export abstract class BaseCommandService implements ICommandService {
         // Check inventory first
         const inventoryItems = this.inventoryMechanics.listInventory();
         for (const itemId of inventoryItems) {
-            const item = await this.sceneService.findObject(itemId);
+            const item = this.sceneService.findObjectById(itemId);
             if (item && item.name.toLowerCase() === objectName.toLowerCase()) {
                 return item;
             }
@@ -104,39 +55,16 @@ export abstract class BaseCommandService implements ICommandService {
         
         // Find matching objects
         for (const obj of sceneObjects) {
-            if (obj.name.toLowerCase() === objectName.toLowerCase()) {
-                // If the object is directly visible or in inventory
-                if (await this.checkVisibility(obj)) {
-                    return obj;
-                }
-                
-                // If the object is in a visible, open container
-                const container = this.containerMechanics.findContainerWithItem(obj.id);
-                if (container && 
-                    await this.checkVisibility(container) && 
-                    this.containerMechanics.isOpen(container.id)) {
-                    return obj;
-                }
+            if (obj.name.toLowerCase() === objectName.toLowerCase() && 
+                await this.checkVisibility(obj)) {
+                return obj;
             }
         }
 
         return null;
     }
 
-    protected async handleStateInteraction(object: SceneObject, verb: string): Promise<CommandResponse> {
-        const result = await this.stateMechanics.handleInteraction(object, verb);
-        if (result.success) {
-            await this.gameState.addKnownObject(object.id);
-        }
-        return {
-            success: result.success,
-            message: result.message,
-            incrementTurn: result.success
-        };
-    }
-
-    // Error responses
-    protected noObjectError(verb: string): ErrorResponse {
+    protected noObjectError(verb: string): CommandResponse {
         return { 
             success: false, 
             message: `What do you want to ${verb}?`,
@@ -144,7 +72,7 @@ export abstract class BaseCommandService implements ICommandService {
         };
     }
 
-    protected noSceneError(): ErrorResponse {
+    protected noSceneError(): CommandResponse {
         return { 
             success: false, 
             message: 'Error: No current scene',
@@ -152,7 +80,7 @@ export abstract class BaseCommandService implements ICommandService {
         };
     }
 
-    protected tooDarkError(): ErrorResponse {
+    protected tooDarkError(): CommandResponse {
         return {
             success: false,
             message: "It's too dark to see anything.",
@@ -160,7 +88,7 @@ export abstract class BaseCommandService implements ICommandService {
         };
     }
 
-    protected objectNotFoundError(objectName: string): ErrorResponse {
+    protected objectNotFoundError(objectName: string): CommandResponse {
         return { 
             success: false, 
             message: `You don't see any ${objectName} here.`,
@@ -168,19 +96,26 @@ export abstract class BaseCommandService implements ICommandService {
         };
     }
 
-    protected objectNotVisibleError(objectName: string): ErrorResponse {
-        return {
-            success: false,
-            message: `You can't see the ${objectName} clearly in the dark.`,
-            incrementTurn: false
+    protected cannotInteractError(verb: string, objectName: string): CommandResponse {
+        return { 
+            success: false, 
+            message: `You can't ${verb} the ${objectName}.`,
+            incrementTurn: false 
         };
     }
 
-    protected cannotInteractError(action: string, objectName: string): ErrorResponse {
-        return {
-            success: false,
-            message: `You can't ${action} the ${objectName}.`,
-            incrementTurn: false
-        };
+    async getSuggestions(command: GameCommand): Promise<string[]> {
+        console.log('BaseObjectCommandService.getSuggestions called');
+        // Only suggest objects if we have a verb
+        if (!command.verb) {
+            return [];
+        }
+
+        // Only suggest objects if we don't have one yet
+        if (command.object) {
+            return [];
+        }
+
+        return [];
     }
 }

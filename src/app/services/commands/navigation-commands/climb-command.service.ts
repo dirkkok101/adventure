@@ -1,36 +1,39 @@
 import { Injectable } from '@angular/core';
-import { GameCommand, CommandResponse } from '../../models/game-state.model';
-import { SceneService } from '../scene.service';
-import { GameStateService } from '../game-state.service';
-import { StateMechanicsService } from '../mechanics/state-mechanics.service';
-import { FlagMechanicsService } from '../mechanics/flag-mechanics.service';
-import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
-import { InventoryMechanicsService } from '../mechanics/inventory-mechanics.service';
-import { LightMechanicsService } from '../mechanics/light-mechanics.service';
-import { BaseObjectCommandService } from './base-object-command.service';
-import { ErrorResponse } from './bases/command-types';
+import { GameCommand, CommandResponse } from '../../../models/game-state.model';
+import { SceneService } from '../../scene.service';
+import { GameStateService } from '../../game-state.service';
+import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
+import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.service';
+import { InventoryMechanicsService } from '../../mechanics/inventory-mechanics.service';
+import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
+import { ErrorResponse } from '../bases/command-types';
+import { BaseCommandService } from '../bases/base-command.service';
+import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
+import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
 
 @Injectable({
     providedIn: 'root'
 })
-export class ClimbCommandService extends BaseObjectCommandService {
+export class ClimbCommandService extends BaseCommandService {
     constructor(
         gameState: GameStateService,
         sceneService: SceneService,
-        stateMechanics: StateMechanicsService,
         flagMechanics: FlagMechanicsService,
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
-        inventoryMechanics: InventoryMechanicsService
+        inventoryMechanics: InventoryMechanicsService,
+        scoreMechanics: ScoreMechanicsService,
+        containerMechanics: ContainerMechanicsService
     ) {
         super(
             gameState,
             sceneService,
-            stateMechanics,
             flagMechanics,
             progress,
             lightMechanics,
-            inventoryMechanics
+            inventoryMechanics,
+            scoreMechanics,
+            containerMechanics
         );
     }
 
@@ -62,8 +65,7 @@ export class ClimbCommandService extends BaseObjectCommandService {
             } as ErrorResponse;
         }
 
-        // Handle the climb interaction using state mechanics
-        return this.handleStateInteraction(object, 'climb');
+        throw new Error('Not implemented');
     }
 
     override async getSuggestions(command: GameCommand): Promise<string[]> {

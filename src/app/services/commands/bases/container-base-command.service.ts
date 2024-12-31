@@ -3,21 +3,18 @@ import { GameCommand, SceneObject, CommandResponse } from '../../../models/game-
 import { BaseCommandService } from './base-command.service';
 import { GameStateService } from '../../game-state.service';
 import { SceneService } from '../../scene.service';
-import { StateMechanicsService } from '../../mechanics/state-mechanics.service';
 import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
 import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.service';
 import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
 import { InventoryMechanicsService } from '../../mechanics/inventory-mechanics.service';
 import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
 import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
-import { ErrorResponse, SuccessResponse } from './command-types';
 
 @Injectable()
 export abstract class ContainerBaseCommandService extends BaseCommandService {
     constructor(
         gameState: GameStateService,
         sceneService: SceneService,
-        stateMechanics: StateMechanicsService,
         flagMechanics: FlagMechanicsService,
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,
@@ -28,7 +25,6 @@ export abstract class ContainerBaseCommandService extends BaseCommandService {
         super(
             gameState,
             sceneService,
-            stateMechanics,
             flagMechanics,
             progress,
             lightMechanics,
@@ -92,11 +88,7 @@ export abstract class ContainerBaseCommandService extends BaseCommandService {
     }
 
     protected async handleContainerInteraction(object: SceneObject, container: SceneObject, action: string): Promise<void> {
-        await this.handleScoring({
-            action,
-            object,
-            container
-        });
+
     }
 
     protected getContainerSuggestions(command: GameCommand): string[] {
