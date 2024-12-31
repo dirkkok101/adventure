@@ -142,8 +142,8 @@ export class GameComponent implements OnInit, OnDestroy {
         }
     }
 
-    onInput() {
-        this.suggestions = this.gameService.getSuggestions(this.userInput);
+    async onInput() {
+        this.suggestions = await this.gameService.getSuggestions(this.userInput);
         this.showSuggestions = this.suggestions.length > 0;
     }
 }

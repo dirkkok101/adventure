@@ -47,6 +47,9 @@ export class GameService {
             return;
         }
 
+        // Add command to output with a > prefix
+        this.gameText.addText(`> ${input}`);
+
         this.progress.incrementMoves();
         const result = await this.commandService.processInput(input);
         
@@ -68,9 +71,9 @@ export class GameService {
         }
     }
 
-    getSuggestions(input: string): string[] {
+    async getSuggestions(input: string): Promise<string[]> {
         try {
-            return this.commandService.getSuggestions(input);
+            return await this.commandService.getSuggestions(input);
         } catch (error) {
             console.error('Error getting suggestions:', error);
             return [];

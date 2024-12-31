@@ -10,6 +10,7 @@ import { TakeCommandService } from './take-command.service';
 import { PutCommandService } from './put-command.service';
 import { ReadCommandService } from './read-command.service';
 import { TurnCommandService } from './turn-command.service';
+import { ClimbCommandService } from './climb-command.service';
 import { GameTextService } from '../game-text.service';
 import { ProgressMechanicsService } from '../mechanics/progress-mechanics.service';
 
@@ -52,31 +53,33 @@ export class CommandService {
     private commandHandlers: CommandHandler[];
 
     constructor(
-        private movementCommand: MovementCommandService,
-        private inventoryCommand: InventoryCommandService,
-        private dropCommand: DropCommandService,
-        private lookCommand: LookCommandService,
-        private examineCommand: ExamineCommandService,
-        private openCloseCommand: OpenCloseCommandService,
-        private takeCommand: TakeCommandService,
-        private putCommand: PutCommandService,
-        private readCommand: ReadCommandService,
-        private turnCommand: TurnCommandService,
+        private movement: MovementCommandService,
+        private inventory: InventoryCommandService,
+        private drop: DropCommandService,
+        private look: LookCommandService,
+        private examine: ExamineCommandService,
+        private openClose: OpenCloseCommandService,
+        private take: TakeCommandService,
+        private put: PutCommandService,
+        private read: ReadCommandService,
+        private turn: TurnCommandService,
+        private climb: ClimbCommandService,
         private gameText: GameTextService,
         private progress: ProgressMechanicsService
     ) {
         // Only add handlers that implement the CommandHandler interface
         this.commandHandlers = [
-            movementCommand,
-            inventoryCommand,
-            dropCommand,
-            lookCommand,
-            examineCommand,
-            openCloseCommand,
-            takeCommand,
-            putCommand,
-            readCommand,
-            turnCommand
+            movement,
+            inventory,
+            drop,
+            look,
+            examine,
+            openClose,
+            take,
+            put,
+            read,
+            turn,
+            climb
         ].filter(handler => 
             typeof handler.canHandle === 'function' && 
             typeof handler.handle === 'function'
@@ -99,7 +102,7 @@ export class CommandService {
         // Handle movement commands
         if (DIRECTIONS.has(command.verb)) {
             command.verb = DIRECTION_ALIASES[command.verb] || command.verb;
-            return this.movementCommand.handle(command);
+            return this.movement.handle(command);
         }
 
         // Find appropriate command handler
@@ -176,7 +179,7 @@ export class CommandService {
         };
     }
 
-    getSuggestions(input: string): string[] {
+    async getSuggestions(input: string): Promise<string[]> {
         const command = this.parseCommand(input.toLowerCase());
         if (!command) {
             return [];
@@ -191,16 +194,22 @@ export class CommandService {
         }
 
         // Add context-specific suggestions from handlers
-        for (const handler of this.commandHandlers) {
-            if (handler.getSuggestions) {
-                const handlerSuggestions = handler.getSuggestions(command);
-                if (handlerSuggestions instanceof Promise) {
-                    // Skip async suggestions in the synchronous method
-                    continue;
-                }
-                suggestions.push(...handlerSuggestions);
-            }
-        }
+        const handlerSuggestions = await Promise.all(
+            this.commandHandlers
+                .filter(handler => handler.getSuggestions)
+                .map(async handler => {
+                    try {
+                        const result = await handler.getSuggestions!(command);
+                        return result;
+                    } catch (error) {
+                        console.error('Error getting suggestions:', error);
+                        return [];
+                    }
+                })
+        );
+
+        // Flatten all suggestions into a single array
+        suggestions.push(...handlerSuggestions.flat());
 
         // Filter suggestions to match input
         return [...new Set(suggestions)]

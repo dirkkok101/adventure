@@ -17,14 +17,15 @@ export const kitchen: Scene = {
         window: {
             id: 'window',
             name: 'Window',
-            visibleOnEntry: true,
-            canTake: false,
             descriptions: {
                 default: 'The window looks out onto the front yard.',
                 states: {
                     'windowOpen': 'The window is open, letting in a fresh breeze.'
                 }
             },
+            visibleOnEntry: true,
+            canTake: false,
+            moveable: false,
             interactions: {
                 examine: {
                     message: 'The window looks out onto the front yard. You can see the mailbox from here.',
@@ -48,23 +49,24 @@ export const kitchen: Scene = {
         table: {
             id: 'table',
             name: 'Table',
-            visibleOnEntry: true,
-            canTake: false,
             descriptions: {
                 default: 'The table seems to have been used recently for the preparation of food. On it you can see a bottle of water and a clove of garlic.',
                 states: {
                     'hasWater,hasGarlic': 'The table seems to have been used recently for the preparation of food.',
                     'hasWater,!hasGarlic': 'The table seems to have been used recently for the preparation of food. On it you can see a clove of garlic.',
-                    '!hasWater,hasGarlic': 'The table seems to have been used recently for the preparation of food. On it you can see a bottle of water.',
+                    '!hasWater,hasGarlic': 'The table seems to have been used recently for the preparation of food. On it you can see a bottle of water.'
                 }
             },
+            visibleOnEntry: true,
+            canTake: false,
+            moveable: false,
             interactions: {
                 examine: {
                     message: 'The table seems to have been used recently for the preparation of food. On it you can see a bottle of water and a clove of garlic.',
                     states: {
                         'hasWater,hasGarlic': 'The table seems to have been used recently for the preparation of food.',
                         'hasWater,!hasGarlic': 'The table seems to have been used recently for the preparation of food. On it you can see a clove of garlic.',
-                        '!hasWater,hasGarlic': 'The table seems to have been used recently for the preparation of food. On it you can see a bottle of water.',
+                        '!hasWater,hasGarlic': 'The table seems to have been used recently for the preparation of food. On it you can see a bottle of water.'
                     }
                 }
             }
@@ -72,12 +74,13 @@ export const kitchen: Scene = {
         water: {
             id: 'water',
             name: 'Bottle of Water',
+            descriptions: {
+                default: 'A clear glass bottle full of water.',
+                examine: 'The bottle is made of clear glass and is full of water.'
+            },
             visibleOnEntry: true,
             canTake: true,
             weight: 2,
-            descriptions: {
-                default: 'A clear glass bottle full of water.'
-            },
             interactions: {
                 examine: {
                     message: 'The bottle is made of clear glass and is full of water.'
@@ -85,24 +88,27 @@ export const kitchen: Scene = {
                 take: {
                     message: 'Taken.',
                     grantsFlags: ['hasWater'],
-                    score: 2
+                    score: 2,
+                    addToInventory: ['water']
                 },
                 drink: {
                     message: 'The water is cool and refreshing.',
                     removesFlags: ['hasWater'],
-                    requiredFlags: ['hasWater']
+                    requiredFlags: ['hasWater'],
+                    removeFromInventory: ['water']
                 }
             }
         },
         garlic: {
             id: 'garlic',
             name: 'Garlic Clove',
+            descriptions: {
+                default: 'A fresh clove of garlic.',
+                examine: 'The garlic clove looks fresh and pungent.'
+            },
             visibleOnEntry: true,
             canTake: true,
             weight: 1,
-            descriptions: {
-                default: 'A fresh clove of garlic.'
-            },
             interactions: {
                 examine: {
                     message: 'The garlic clove looks fresh and pungent.'
@@ -110,24 +116,29 @@ export const kitchen: Scene = {
                 take: {
                     message: 'Taken.',
                     grantsFlags: ['hasGarlic'],
-                    score: 2
+                    score: 2,
+                    addToInventory: ['garlic']
                 },
                 eat: {
                     message: 'The raw garlic is very strong! Your breath will smell for hours.',
                     removesFlags: ['hasGarlic'],
-                    requiredFlags: ['hasGarlic']
+                    requiredFlags: ['hasGarlic'],
+                    removeFromInventory: ['garlic']
                 }
             }
         },
         sack: {
             id: 'sack',
             name: 'Brown Sack',
-            visibleOnEntry: true,
-            canTake: true,
             descriptions: {
                 default: 'The brown sack smells of hot peppers.',
-                empty: 'The brown sack is empty.'
+                empty: 'The brown sack is empty.',
+                examine: 'The brown sack smells of hot peppers and appears to contain something.'
             },
+            visibleOnEntry: true,
+            canTake: true,
+            isContainer: true,
+            capacity: 5,
             interactions: {
                 examine: {
                     message: 'The brown sack smells of hot peppers and appears to contain something.',
@@ -138,7 +149,8 @@ export const kitchen: Scene = {
                 take: {
                     message: 'Taken.',
                     grantsFlags: ['hasSack'],
-                    score: 2
+                    score: 2,
+                    addToInventory: ['sack']
                 }
             }
         }
@@ -147,19 +159,19 @@ export const kitchen: Scene = {
         {
             direction: 'west',
             targetScene: 'livingRoom',
-            description: 'An archway leads west into the living room.'
-        },
-        {
-            direction: 'up',
-            targetScene: 'attic',
-            description: 'A dark staircase leads upward.'
+            description: 'A passage leads west into the living room.'
         },
         {
             direction: 'east',
             targetScene: 'westOfHouse',
-            description: 'The window leads outside.',
+            description: 'The window leads to the front of the house.',
             requiredFlags: ['windowOpen'],
-            failureMessage: 'The window needs to be opened first.'
+            failureMessage: 'The window is closed.'
+        },
+        {
+            direction: 'up',
+            targetScene: 'attic',
+            description: 'The stairs are dark and dusty.'
         }
     ]
 };
