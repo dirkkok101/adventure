@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { ContainerBaseCommandService } from '../bases/container-base-command.service';
+import { BaseCommandService } from '../bases/base-command.service';
 import { GameStateService } from '../../game-state.service';
 import { SceneMechanicsService } from '../../mechanics/scene-mechanics.service';
 import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
@@ -10,27 +10,48 @@ import { ContainerMechanicsService } from '../../mechanics/container-mechanics.s
 import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
 import { GameTextService } from '../../game-text.service';
 import { GameCommand, CommandResponse, SceneObject } from '../../../models';
-import { BaseCommandService } from '../bases/base-command.service';
 
 /**
  * Command service for handling take/get commands.
- * Manages taking objects from scenes and containers into inventory.
+ * Orchestrates taking objects from scenes and containers into inventory.
  * 
  * Key Responsibilities:
- * - Validate object takeability
- * - Handle container interactions
- * - Manage inventory additions
- * - Process scoring for special takes
+ * - Parse and validate take commands
+ * - Coordinate between mechanics services for take operations
+ * - Handle command suggestions
+ * - Manage transaction-like operations for taking objects
  * 
- * Dependencies:
- * - InventoryMechanicsService: Inventory management
- * - ContainerMechanicsService: Container interactions
- * - SceneMechanicsService: Scene object management
- * - ScoreMechanicsService: Scoring for special takes
+ * State Dependencies (via mechanics services):
+ * - Object location state (via FlagMechanics)
+ * - Container state (via ContainerMechanics)
+ * - Scene object state (via SceneMechanics)
+ * - Scoring state (via ScoreMechanics)
+ * - Light state (via LightMechanics)
+ * - Progress state (via ProgressMechanics)
+ * 
+ * Service Dependencies:
+ * - FlagMechanicsService: State management and flags
+ * - InventoryMechanicsService: Inventory operations
+ * - ContainerMechanicsService: Container access
+ * - SceneMechanicsService: Scene and object access
+ * - ScoreMechanicsService: Take-related scoring
+ * - LightMechanicsService: Visibility checks
+ * - ProgressMechanicsService: Turn and progress tracking
  * 
  * Command Format:
  * - "take/get/pick [object]"
  * - Handles taking objects from scene or open containers
+ * 
+ * Error Handling:
+ * - Validates command format and object existence
+ * - Checks visibility and accessibility conditions
+ * - Manages rollback on failed operations
+ * - Provides specific error messages for each failure case
+ * 
+ * State Update Rules:
+ * - All state changes go through mechanics services
+ * - State updates are atomic and consistent
+ * - Rollback on failure maintains consistency
  */
 @Injectable({
     providedIn: 'root'
@@ -72,6 +93,13 @@ export class TakeObjectCommandService extends BaseCommandService {
      * Handles the take command execution
      * @param command Command to execute
      * @returns Response indicating success/failure and appropriate message
+     * 
+     * State Effects (all via mechanics services):
+     * - May update inventory state (via InventoryMechanics)
+     * - May update container state (via ContainerMechanics)
+     * - May update scene state (via SceneMechanics)
+     * - May update score state (via ScoreMechanics)
+     * - Updates progress state (via ProgressMechanics)
      */
     async handle(command: GameCommand): Promise<CommandResponse> {
         try {
@@ -84,8 +112,8 @@ export class TakeObjectCommandService extends BaseCommandService {
                 };
             }
 
-            // Find and validate object
-            const object = await this.findObject(command.object);
+            // Find and validate object through SceneMechanics
+            const object = await this.sceneService.findObject(command.object);
             if (!object) {
                 return {
                     success: false,
@@ -94,14 +122,21 @@ export class TakeObjectCommandService extends BaseCommandService {
                 };
             }
 
-            // Validate conditions
+            // Validate conditions through mechanics services
             const validationResult = await this.validateTakeConditions(object);
             if (!validationResult.success) {
                 return validationResult;
             }
 
-            // Perform take operation
-            return this.performTakeAction(object);
+            // Perform take operation through mechanics services
+            const takeResult = await this.performTakeAction(object);
+
+            // Update progress through ProgressMechanics
+            if (takeResult.success) {
+                await this.progress.handleActionComplete();
+            }
+
+            return takeResult;
         } catch (error) {
             console.error('Error handling take command:', error);
             return {
@@ -116,28 +151,26 @@ export class TakeObjectCommandService extends BaseCommandService {
      * Validates all conditions required to take an object
      * @param object Object to validate
      * @returns Response indicating if take is possible
+     * 
+     * State Dependencies (all read-only):
+     * - Light state (via LightMechanics)
+     * - Container state (via ContainerMechanics)
+     * - Inventory state (via InventoryMechanics)
+     * - Scene state (via SceneMechanics)
      */
     private async validateTakeConditions(object: SceneObject): Promise<CommandResponse> {
-        // Check light conditions
-        if (!await this.lightMechanics.isLightPresent()) {
+        // Check light and accessibility through SceneMechanics
+        if (!await this.sceneService.isObjectAccessible(object.id)) {
             return {
                 success: false,
-                message: this.gameText.get('error.tooDark', { action: 'take' }),
+                message: this.gameText.get('error.objectNotAccessible', { item: object.name }),
                 incrementTurn: false
             };
         }
 
-        // Check visibility
-        if (!await this.checkVisibility(object)) {
-            return {
-                success: false,
-                message: this.gameText.get('error.objectNotVisible', { item: object.name }),
-                incrementTurn: false
-            };
-        }
-
-        // Check if object can be taken
-        if (!await this.inventoryMechanics.canTakeObject(object)) {
+        // Check take possibility through InventoryMechanics
+        const takeCheck = await this.inventoryMechanics.canTakeObject(object.id);
+        if (!takeCheck) {
             return {
                 success: false,
                 message: this.gameText.get('error.cantTake', { item: object.name }),
@@ -145,9 +178,9 @@ export class TakeObjectCommandService extends BaseCommandService {
             };
         }
 
-        // Check container accessibility if applicable
+        // Check container accessibility through ContainerMechanics
         const container = await this.containerMechanics.findContainerWithItem(object.id);
-        if (container && !await this.containerMechanics.isOpen(container.id)) {
+        if (container && !this.flagMechanics.isContainerOpen(container.id)) {
             return {
                 success: false,
                 message: this.gameText.get('error.containerClosed', { container: container.name }),
@@ -162,40 +195,38 @@ export class TakeObjectCommandService extends BaseCommandService {
      * Performs the take action with proper error handling and state management
      * @param object Object to take
      * @returns Response indicating success/failure and appropriate message
+     * 
+     * State Effects (all via mechanics services):
+     * - Updates inventory state (via InventoryMechanics)
+     * - Updates container/scene state (via respective mechanics)
+     * - Updates score state (via ScoreMechanics)
+     * - Updates object location state (via FlagMechanics)
      */
     private async performTakeAction(object: SceneObject): Promise<CommandResponse> {
         try {
-            // Find container if object is in one
+            // Find container through ContainerMechanics
             const container = await this.containerMechanics.findContainerWithItem(object.id);
 
-            // Start transaction-like operation
+            // Start atomic operation
+            let takeResult;
+            
+            // Take object through appropriate mechanics service
             if (container) {
-                await this.containerMechanics.removeFromContainer(container.id, object.id);
+                takeResult = await this.inventoryMechanics.takeObjectFromContainer(object.id, container.id);
             } else {
-                const removeResult = await this.sceneService.removeObjectFromScene(object.id);
-                if (!removeResult.success) {
-                    return {
-                        success: false,
-                        message: this.gameText.get('error.cantTake', { item: object.name }),
-                        incrementTurn: false
-                    };
-                }
+                takeResult = await this.inventoryMechanics.takeObject(object.id);
             }
 
-            // Add to inventory
-            const takeResult = await this.inventoryMechanics.takeObject(object);
             if (!takeResult.success) {
-                // Rollback on failure
-                if (container) {
-                    await this.containerMechanics.addToContainer(container.id, object.id);
-                } else {
-                    await this.sceneService.addObjectToScene(object);
-                }
-                return { ...takeResult, incrementTurn: false };
+                return {
+                    success: false,
+                    message: takeResult.message || this.gameText.get('error.cantTake', { item: object.name }),
+                    incrementTurn: false
+                };
             }
 
-            // Update game state
-            await this.updateGameState(object, container);
+            // Handle scoring through ScoreMechanics
+            await this.handleTakeScoring(object, container);
 
             return {
                 success: true,
@@ -213,33 +244,36 @@ export class TakeObjectCommandService extends BaseCommandService {
     }
 
     /**
-     * Updates game state after successful take
+     * Handles scoring for take action through ScoreMechanics
      * @param object Object that was taken
      * @param container Container object was taken from (if any)
+     * 
+     * State Effects:
+     * - Updates score state (via ScoreMechanics)
      */
-    private async updateGameState(object: SceneObject, container: SceneObject | null): Promise<void> {
-        // Update object location
-        await this.flagMechanics.setObjectLocation(object.id, 'inventory');
-
-        // Handle scoring
-        const takeScore = object.scoring?.take;
-        if (takeScore) {
-            await this.scoreMechanics.addScore(takeScore);
-            
-            // Additional score if taken from a specific container
-            if (container && object.scoring?.containerTargets?.[container.id]) {
-                await this.scoreMechanics.addScore(object.scoring.containerTargets[container.id]);
-            }
+    private async handleTakeScoring(object: SceneObject, container: SceneObject | null): Promise<void> {
+        try {
+            // Handle scoring through ScoreMechanics
+            await this.scoreMechanics.handleObjectScoring({
+                object: object,
+                action: 'take',
+                container: container || undefined
+            });
+        } catch (error) {
+            console.error('Error handling take scoring:', error);
+            throw error;
         }
-
-        // Update progress
-        this.progress.incrementTurns();
     }
 
     /**
      * Gets command suggestions based on current state
      * @param command Partial command to get suggestions for
      * @returns Array of suggested command completions
+     * 
+     * State Dependencies (all read-only):
+     * - Scene state (via SceneMechanics)
+     * - Container state (via ContainerMechanics)
+     * - Inventory state (via InventoryMechanics)
      */
     override async getSuggestions(command: GameCommand): Promise<string[]> {
         try {
@@ -252,24 +286,29 @@ export class TakeObjectCommandService extends BaseCommandService {
 
             const suggestions = new Set<string>();
 
-            // Get takeable objects from current scene
+            // Get takeable objects through SceneMechanics and InventoryMechanics
             const visibleObjects = await this.sceneService.getVisibleObjects(scene);
             for (const object of visibleObjects) {
-                if (await this.inventoryMechanics.canTakeObject(object)) {
+                const takeCheck = await this.inventoryMechanics.canTakeObject(object.id);
+                if (takeCheck) {
                     suggestions.add(object.name.toLowerCase());
                 }
             }
 
-            // Get objects from open containers
+            // Get container objects through ContainerMechanics
             const containers = visibleObjects.filter(obj => obj.isContainer);
             for (const container of containers) {
-                if (!await this.containerMechanics.isOpen(container.id)) continue;
+                const containerCheck = await this.containerMechanics.isOpen(container.id);
+                if (!containerCheck) continue;
 
-                const contents = await this.containerMechanics.getContainerContents(container.id);
+                const contents = await this.containerMechanics.getContainerContents(container);
                 for (const itemId of contents) {
                     const item = await this.sceneService.findObjectById(itemId);
-                    if (item && await this.inventoryMechanics.canTakeObject(item)) {
-                        suggestions.add(item.name.toLowerCase());
+                    if (item) {
+                        const takeCheck = await this.inventoryMechanics.canTakeObject(item.id);
+                        if (takeCheck) {
+                            suggestions.add(item.name.toLowerCase());
+                        }
                     }
                 }
             }

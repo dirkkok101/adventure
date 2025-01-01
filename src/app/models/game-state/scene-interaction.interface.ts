@@ -69,4 +69,7 @@ export interface SceneInteraction {
     
     /** Whether action provides light */
     providesLight?: boolean;
+    
+    /** Target scene for transitions (like climbing through windows) */
+    targetScene?: string;
 }

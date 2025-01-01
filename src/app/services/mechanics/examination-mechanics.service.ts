@@ -232,7 +232,7 @@ export class ExaminationMechanicsService {
      * - Object visibility
      * - Container states
      */
-    private async isObjectExaminable(object: SceneObject): Promise<boolean> {
+    public async isObjectExaminable(object: SceneObject): Promise<boolean> {
         // Check visibility
         if (!await this.lightMechanics.isObjectVisible(object)) {
             return false;

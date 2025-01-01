@@ -5,38 +5,43 @@ import { SceneMechanicsService } from './scene-mechanics.service';
 import { ScoreMechanicsService } from './score-mechanics.service';
 import { GameTextService } from '../game-text.service';
 import { CommandResponse, SceneExit } from '../../models';
+import { GameStateService } from '../game-state.service';
 
 /**
- * Service responsible for managing movement mechanics.
+ * Service responsible for managing movement mechanics and scene transitions.
+ * 
+ * Responsibilities:
+ * - Manages movement between scenes
+ * - Validates movement conditions and requirements
+ * - Handles movement-related scoring
+ * - Tracks movement history and state
+ * - Delegates state changes to FlagMechanicsService
  * 
  * State Dependencies (via FlagMechanicsService):
  * - [exitId]_used: Tracks if an exit has been used
  * - [exitId]_score: Tracks if movement score has been awarded
  * - [sceneId]_visited: Scene visit tracking
+ * - Required flags specified in exit configurations
  * 
  * Service Dependencies:
  * - FlagMechanicsService: State management and flag tracking
- * - LightMechanicsService: Visibility checks
- * - SceneMechanicsService: Scene and exit access
- * - ScoreMechanicsService: Movement scoring
- * - GameTextService: Localized text
- * 
- * Key Responsibilities:
- * - Movement validation
- * - Exit resolution
- * - Movement state tracking
- * - Movement scoring
+ * - LightMechanicsService: Visibility checks for movement
+ * - SceneMechanicsService: Scene transitions and access
+ * - ScoreMechanicsService: Movement-related scoring
+ * - GameTextService: Localized text and messages
+ * - GameStateService: Scene state management
  * 
  * Error Handling:
- * - Validates movement conditions
- * - Checks light conditions
- * - Validates exit requirements
- * - Provides descriptive error messages
+ * - Validates movement preconditions (light, flags)
+ * - Validates exit existence and accessibility
+ * - Provides descriptive error messages for all failure cases
+ * - Maintains consistent state on error
  * 
  * State Management:
- * - All state changes go through FlagMechanicsService
- * - State queries use FlagMechanicsService
- * - Maintains data consistency
+ * - All state changes delegated to FlagMechanicsService
+ * - Atomic state updates for movement operations
+ * - Consistent state verification after changes
+ * - Movement history tracking
  */
 @Injectable({
     providedIn: 'root'
@@ -47,7 +52,8 @@ export class MovementMechanicsService {
         private lightMechanics: LightMechanicsService,
         private sceneService: SceneMechanicsService,
         private scoreMechanics: ScoreMechanicsService,
-        private gameText: GameTextService
+        private gameText: GameTextService,
+        private gameState: GameStateService
     ) {}
 
     /**
@@ -132,7 +138,8 @@ export class MovementMechanicsService {
         this.flagMechanics.setExitUsed(exit.targetScene);
 
         // Move to new scene
-        const newScene = await this.sceneService.moveToScene(exit.targetScene);
+        this.gameState.setCurrentScene(exit.targetScene);
+        const newScene = this.sceneService.getScene(exit.targetScene);
         if (!newScene) {
             return {
                 success: false,

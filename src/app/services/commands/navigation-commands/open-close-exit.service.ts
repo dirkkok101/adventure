@@ -11,8 +11,22 @@ import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
 import { GameCommand, CommandResponse } from '../../../models';
 
 /**
- * Handles commands for opening and closing exits (doors, gates, etc.) in scenes
- * Orchestrates between SceneService for exit management and mechanics services for game state changes
+ * Service responsible for handling commands related to opening and closing exits (doors, gates, etc.) in scenes.
+ * 
+ * State Dependencies (via FlagMechanicsService):
+ * - Exit open/closed states ([direction]_open)
+ * - Exit locked states ([direction]_locked)
+ * - Exit openable states ([direction]_openable)
+ * - Scene visibility and light conditions
+ * 
+ * Error Conditions:
+ * - No object specified in command
+ * - Scene too dark to interact
+ * - Exit not found in current scene
+ * - Exit cannot be operated (locked, not openable, etc.)
+ * - Exit requires light but scene is dark
+ * 
+ * @implements {BaseCommandService}
  */
 @Injectable({
     providedIn: 'root'
@@ -50,8 +64,22 @@ export class OpenCloseExitCommandService extends BaseCommandService {
     }
 
     /**
-     * Handles open/close commands for exits
-     * Orchestrates between SceneService and mechanics services
+     * Handles open/close commands for exits by orchestrating between services
+     * 
+     * State Effects:
+     * - Updates exit open/closed state through FlagMechanicsService
+     * - Updates score if action is successful
+     * - Increments turn counter on success
+     * 
+     * Error Conditions:
+     * - Returns error if no object specified
+     * - Returns error if scene is too dark
+     * - Returns error if exit not found
+     * - Returns error if exit cannot be operated
+     * - Returns error if exit is locked
+     * - Returns error if exit is not openable
+     * - Returns error if exit requires light but scene is dark
+     * 
      * @param command The command to handle
      * @returns Command response with success/failure and message
      */
@@ -60,54 +88,120 @@ export class OpenCloseExitCommandService extends BaseCommandService {
             return this.noObjectError(command.verb);
         }
 
-        if (!this.checkLightInScene()) {
-            return this.tooDarkError();
+        // Check if there's enough light to interact
+        if (!await this.lightMechanics.isLightPresent()) {
+            return {
+                success: false,
+                message: 'It is too dark to see.',
+                incrementTurn: false
+            };
         }
 
-        // Try to find an exit matching the object name
-        const exit = this.sceneService.findExit(command.object);
+        // Get the current scene and available exits
+        const scene = this.sceneService.getCurrentScene();
+        if (!scene) {
+            return {
+                success: false,
+                message: 'No current scene.',
+                incrementTurn: false
+            };
+        }
+
+        // Get available exits (this filters based on light and required flags)
+        const availableExits = this.sceneService.getAvailableExits(scene);
+        
+        // Try to find the exit among available exits
+        const exit = availableExits.find(e => 
+            e.direction.toLowerCase() === command.object?.toLowerCase() ||
+            e.description.toLowerCase().includes(command.object?.toLowerCase() || '')
+        );
+
         if (!exit) {
-            return this.objectNotFoundError(command.object);
+            return {
+                success: false,
+                message: `You don't see any ${command.object} here.`,
+                incrementTurn: false
+            };
         }
 
-        // Handle the open/close action
-        const result = command.verb === 'open' 
-            ? await this.sceneService.openExit(exit)
-            : await this.sceneService.closeExit(exit);
-
-        // Handle scoring if successful
-        if (result.success && result.score) {
-            await this.scoreMechanics.addScore(result.score);
+        // Check if exit requires light specifically
+        if (exit.requiresLight && !await this.lightMechanics.isLightPresent()) {
+            return {
+                success: false,
+                message: 'It is too dark to see the exit clearly.',
+                incrementTurn: false
+            };
         }
 
-        // Increment turn counter for successful actions
-        if (result.success) {
-            this.progress.incrementTurns();
+        // Check if exit is openable
+        if (!exit.isOpenable || !this.flagMechanics.isExitOpenable(exit.direction)) {
+            return {
+                success: false,
+                message: `The ${exit.direction} cannot be ${command.verb}ed.`,
+                incrementTurn: false
+            };
         }
+
+        // Check if exit is locked
+        if (this.flagMechanics.isExitLocked(exit.direction)) {
+            return {
+                success: false,
+                message: `The ${exit.direction} is locked.`,
+                incrementTurn: false
+            };
+        }
+
+        const isOpening = command.verb === 'open';
+        const currentlyOpen = this.flagMechanics.isExitOpen(exit.direction);
+
+        // Check if already in desired state
+        if (isOpening === currentlyOpen) {
+            return {
+                success: false,
+                message: `The ${exit.direction} is already ${isOpening ? 'open' : 'closed'}.`,
+                incrementTurn: false
+            };
+        }
+
+        // Update exit state
+        this.flagMechanics.setExitOpen(exit.direction, isOpening);
+
+        // Handle scoring if not previously scored
+        if (!this.flagMechanics.isActionScored(exit.direction, command.verb)) {
+            await this.scoreMechanics.addScore(1);
+            this.flagMechanics.setActionScored(exit.direction, command.verb);
+        }
+
+        // Increment turn counter
+        await this.progress.incrementTurns();
 
         return {
-            success: result.success,
-            message: result.message,
-            incrementTurn: result.success
+            success: true,
+            message: `You ${command.verb} the ${exit.direction}.`,
+            incrementTurn: true
         };
     }
 
     /**
-     * Gets suggestions for command completion
-     * @param command The current command being typed
+     * Get suggestions for openable/closeable exits
+     * Only returns suggestions if there is sufficient light
+     * 
+     * @param command Command to get suggestions for
      * @returns Array of openable/closeable exit names
      */
     override async getSuggestions(command: GameCommand): Promise<string[]> {
-        if (!command.verb || command.object || !this.checkLightInScene()) {
+        // Only provide suggestions if we have light and no object specified
+        if (!command.verb || command.object || !await this.lightMechanics.isLightPresent()) {
             return [];
         }
 
         const scene = this.sceneService.getCurrentScene();
-        if (!scene?.exits) return [];
+        if (!scene) return [];
 
-        // Only suggest openable exits
-        return scene.exits
+        // Get available exits and filter for openable ones
+        const availableExits = this.sceneService.getAvailableExits(scene);
+        return availableExits
             .filter(exit => exit.isOpenable)
-            .map(exit => exit.description.toLowerCase());
+            .map(exit => exit.direction);
     }
 }

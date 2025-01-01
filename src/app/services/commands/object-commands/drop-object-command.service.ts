@@ -10,6 +10,7 @@ import { BaseCommandService } from '../bases/base-command.service';
 import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
 import { GameCommand, CommandResponse, SceneObject } from '../../../models';
 import { GameTextService } from '../../game-text.service';
+import { ScoringOptions } from '../../../models/scoring/scoring-options.interface';
 
 /**
  * Command service for handling drop commands.
@@ -21,11 +22,32 @@ import { GameTextService } from '../../game-text.service';
  * - Manage scene object placement
  * - Handle scoring for special drops
  * 
- * Dependencies:
+ * Service Dependencies:
  * - InventoryMechanicsService: Inventory management
+ *   - Handles object removal from inventory
+ *   - Validates object possession
  * - SceneMechanicsService: Scene object management
+ *   - Manages scene object placement
+ *   - Validates scene state
  * - ScoreMechanicsService: Scoring for special drops
+ *   - Handles drop-related scoring
+ *   - Manages score state
  * - FlagMechanicsService: Game state management
+ *   - Tracks object locations
+ *   - Manages state flags
+ * 
+ * State Dependencies:
+ * - [objectId]_has via InventoryMechanicsService
+ * - [sceneId]_objects via SceneMechanicsService
+ * - [objectId]_location via FlagMechanicsService
+ * - [objectId]_score via ScoreMechanicsService
+ * 
+ * Error Handling:
+ * - Invalid command format: Returns error before processing
+ * - Object not found: Returns error with details
+ * - Object not in inventory: Returns error with details
+ * - Scene state errors: Rolls back changes
+ * - Scoring errors: Logs but continues
  * 
  * Command Format:
  * - "drop [object]"
@@ -62,6 +84,8 @@ export class DropObjectCommandService extends BaseCommandService {
      * Checks if this service can handle the given command
      * @param command Command to check
      * @returns True if command is a valid drop command without preposition
+     * 
+     * @throws None
      */
     canHandle(command: GameCommand): boolean {
         // Only handle 'drop' without preposition, use PutCommandService for 'put in'
@@ -72,6 +96,17 @@ export class DropObjectCommandService extends BaseCommandService {
      * Handles the drop command execution
      * @param command Command to execute
      * @returns Response indicating success/failure and appropriate message
+     * 
+     * State Dependencies:
+     * - All dependencies from performDrop
+     * 
+     * Error Conditions:
+     * - No object specified: Returns error
+     * - Object not found: Returns error
+     * - Object not in inventory: Returns error
+     * - All error conditions from performDrop
+     * 
+     * @throws None - All errors returned in CommandResponse
      */
     async handle(command: GameCommand): Promise<CommandResponse> {
         try {
@@ -85,7 +120,7 @@ export class DropObjectCommandService extends BaseCommandService {
             }
 
             // Find and validate object
-            const object = await this.findObject(command.object);
+            const object = await this.sceneService.findObject(command.object);
             if (!object) {
                 return {
                     success: false,
@@ -128,10 +163,30 @@ export class DropObjectCommandService extends BaseCommandService {
      * Performs the actual drop operation with proper error handling and state management
      * @param object Object to drop
      * @returns Response indicating success/failure and appropriate message
+     * 
+     * State Dependencies:
+     * - [objectId]_has via InventoryMechanicsService
+     * - [sceneId]_objects via SceneMechanicsService
+     * - [objectId]_location via FlagMechanicsService
+     * - [objectId]_score via ScoreMechanicsService
+     * 
+     * State Effects:
+     * - Removes object from inventory
+     * - Adds object to current scene
+     * - Updates object location
+     * - Updates score if applicable
+     * 
+     * Error Conditions:
+     * - No current scene: Returns error
+     * - Inventory update fails: Returns error
+     * - Scene update fails: Rolls back inventory change
+     * - Scoring error: Logs but continues
+     * 
+     * @throws None - All errors returned in CommandResponse
      */
     private async performDrop(object: SceneObject): Promise<CommandResponse> {
         try {
-            // Start transaction-like operation
+            // Get current scene
             const currentScene = await this.sceneService.getCurrentScene();
             if (!currentScene) {
                 return {
@@ -142,7 +197,7 @@ export class DropObjectCommandService extends BaseCommandService {
             }
 
             // Remove from inventory
-            const dropResult = await this.inventoryMechanics.dropObject(object);
+            const dropResult = await this.inventoryMechanics.dropObject(object.id);
             if (!dropResult.success) {
                 return {
                     ...dropResult,
@@ -154,7 +209,7 @@ export class DropObjectCommandService extends BaseCommandService {
             const sceneResult = await this.sceneService.addObjectToScene(object);
             if (!sceneResult.success) {
                 // Rollback inventory change if scene update fails
-                await this.inventoryMechanics.addToInventory(object);
+                await this.inventoryMechanics.takeObject(object.id);
                 return {
                     success: false,
                     message: this.gameText.get('error.cantDropHere'),
@@ -162,14 +217,20 @@ export class DropObjectCommandService extends BaseCommandService {
                 };
             }
 
-            // Handle scoring
-            const dropScore = object.scoring?.drop;
-            if (dropScore) {
-                await this.scoreMechanics.addScore(dropScore);
+            // Handle scoring through ScoreMechanicsService
+            try {
+                await this.scoreMechanics.handleObjectScoring({
+                    action: 'drop',
+                    object,
+                    skipGeneralRules: false
+                });
+            } catch (error) {
+                console.error('Error handling drop scoring:', error);
+                // Continue with drop even if scoring fails
             }
 
             // Update game state
-            await this.flagMechanics.setObjectLocation(object.id, currentScene.id);
+            await this.flagMechanics.setObjectFlag(object.id, 'location', true);
             this.progress.incrementTurns();
 
             return {
@@ -191,6 +252,17 @@ export class DropObjectCommandService extends BaseCommandService {
      * Gets command suggestions based on current state
      * @param command Partial command to get suggestions for
      * @returns Array of suggested command completions
+     * 
+     * State Dependencies:
+     * - Inventory state via InventoryMechanicsService
+     * - Object data via SceneMechanicsService
+     * 
+     * Error Conditions:
+     * - Invalid verb: Returns empty array
+     * - No inventory items: Returns empty array
+     * - Error accessing state: Returns empty array
+     * 
+     * @throws None - Returns empty array on error
      */
     override async getSuggestions(command: GameCommand): Promise<string[]> {
         try {

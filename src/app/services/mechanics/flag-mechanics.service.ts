@@ -539,4 +539,168 @@ export class FlagMechanicsService {
     isExitScored(exitId: string): boolean {
         return this.hasFlag(`${exitId}_score`);
     }
+
+    /**
+     * Set whether an object is moveable
+     * @param objectId ID of object to update
+     * @param moveable Whether the object can be moved
+     */
+    setObjectMoveable(objectId: string, moveable: boolean): void {
+        this.setObjectFlag(objectId, 'moveable', moveable);
+    }
+
+    /**
+     * Check if an object is moveable
+     * @param objectId ID of object to check
+     * @returns Whether the object can be moved
+     */
+    isObjectMoveable(objectId: string): boolean {
+        return this.hasObjectFlag(objectId, 'moveable');
+    }
+
+    /**
+     * Set whether an object has been moved
+     * @param objectId ID of object to update
+     * @param moved Whether the object has been moved
+     */
+    setObjectMoved(objectId: string, moved: boolean = true): void {
+        this.setObjectFlag(objectId, 'moved', moved);
+    }
+
+    /**
+     * Check if an object has been moved
+     * @param objectId ID of object to check
+     * @returns Whether the object has been moved
+     */
+    isObjectMoved(objectId: string): boolean {
+        return this.hasObjectFlag(objectId, 'moved');
+    }
+
+    /**
+     * Set whether an exit is open
+     * @param exitId ID of exit to update
+     * @param isOpen Whether the exit should be open
+     */
+    setExitOpen(exitId: string, isOpen: boolean): void {
+        const flag = `${exitId}_open`;
+        if (isOpen) {
+            this.setFlag(flag);
+        } else {
+            this.removeFlag(flag);
+        }
+    }
+
+    /**
+     * Check if an exit is open
+     * @param exitId ID of exit to check
+     * @returns Whether the exit is open
+     */
+    isExitOpen(exitId: string): boolean {
+        return this.hasFlag(`${exitId}_open`);
+    }
+
+    /**
+     * Set whether an exit is locked
+     * @param exitId ID of exit to update
+     * @param isLocked Whether the exit should be locked
+     */
+    setExitLocked(exitId: string, isLocked: boolean): void {
+        const flag = `${exitId}_locked`;
+        if (isLocked) {
+            this.setFlag(flag);
+        } else {
+            this.removeFlag(flag);
+        }
+    }
+
+    /**
+     * Check if an exit is locked
+     * @param exitId ID of exit to check
+     * @returns Whether the exit is locked
+     */
+    isExitLocked(exitId: string): boolean {
+        return this.hasFlag(`${exitId}_locked`);
+    }
+
+    /**
+     * Check if an exit can be opened/closed
+     * @param exitId ID of exit to check
+     * @returns Whether the exit is openable
+     */
+    isExitOpenable(exitId: string): boolean {
+        return this.hasFlag(`${exitId}_openable`);
+    }
+
+    /**
+     * Set whether an exit can be opened/closed
+     * @param exitId ID of exit to update
+     * @param openable Whether the exit can be opened/closed
+     */
+    setExitOpenable(exitId: string, openable: boolean): void {
+        const flag = `${exitId}_openable`;
+        if (openable) {
+            this.setFlag(flag);
+        } else {
+            this.removeFlag(flag);
+        }
+    }
+
+    /**
+     * Set whether an object has been climbed
+     * @param objectId ID of object to update
+     * @param climbed Whether the object has been climbed
+     */
+    setObjectClimbed(objectId: string, climbed: boolean = true): void {
+        if (climbed) {
+            this.setFlag(`${objectId}_climbed`);
+        } else {
+            this.removeFlag(`${objectId}_climbed`);
+        }
+    }
+
+    /**
+     * Check if an object has been climbed
+     * @param objectId ID of object to check
+     * @returns Whether the object has been climbed
+     */
+    isObjectClimbed(objectId: string): boolean {
+        return this.hasFlag(`${objectId}_climbed`);
+    }
+
+    /**
+     * Set whether an object is climbable
+     * @param objectId ID of object to update
+     * @param climbable Whether the object can be climbed
+     */
+    setObjectClimbable(objectId: string, climbable: boolean): void {
+        if (climbable) {
+            this.setFlag(`${objectId}_climbable`);
+        } else {
+            this.removeFlag(`${objectId}_climbable`);
+        }
+    }
+
+    /**
+     * Check if an object is climbable
+     * @param objectId ID of object to check
+     * @returns Whether the object can be climbed
+     */
+    isObjectClimbable(objectId: string): boolean {
+        return this.hasFlag(`${objectId}_climbable`);
+    }
+
+    /**
+     * Sets a flag from an interaction.
+     * Used by command services to set flags granted by interactions.
+     * 
+     * @param flag Flag to set
+     * @param objectId Optional object ID for scoping
+     */
+    setInteractionFlag(flag: string, objectId?: string): void {
+        if (objectId) {
+            this.setObjectFlag(objectId, flag, true);
+        } else {
+            this.setFlag(flag);
+        }
+    }
 }

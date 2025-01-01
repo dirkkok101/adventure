@@ -141,4 +141,20 @@ export class ProgressMechanicsService {
             }))
         );
     }
+
+    /**
+     * Handles the completion of a game action
+     * - Increments the turn counter
+     * - Updates any relevant progress state
+     * 
+     * Should be called after any successful game action:
+     * - Taking/dropping items
+     * - Opening/closing containers
+     * - Using items
+     * - Examining objects
+     * - Any other action that advances game time
+     */
+    handleActionComplete(): void {
+        this.incrementTurns();
+    }
 }

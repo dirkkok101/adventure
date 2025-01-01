@@ -1,3 +1,36 @@
+/**
+ * Command service for handling movement and navigation between scenes.
+ * 
+ * Command Syntax:
+ * - go [direction]
+ * - move [direction]
+ * - [direction] (e.g., "north", "south", etc.)
+ * - enter [object/direction]
+ * 
+ * Valid Directions:
+ * - Primary: north, south, east, west, up, down
+ * - Aliases: n, s, e, w, u, d
+ * 
+ * Command Context:
+ * - Available in any scene with defined exits
+ * - Requires light source for dark scenes
+ * - May require specific flags for certain exits
+ * 
+ * Dependencies:
+ * - MovementMechanicsService: Handles movement logic and validation
+ * - LightMechanicsService: Checks visibility conditions
+ * 
+ * Examples:
+ * - "go north"
+ * - "south"
+ * - "move up"
+ * - "enter door"
+ * 
+ * Side Effects:
+ * - May change current scene
+ * - May update score
+ * - Updates movement history
+ */
 import { Injectable } from '@angular/core';
 import { GameStateService } from '../../game-state.service';
 import { SceneMechanicsService } from '../../mechanics/scene-mechanics.service';
@@ -40,12 +73,27 @@ export class MovementCommandService {
         private movementMechanics: MovementMechanicsService
     ) {}
 
+    /**
+     * Check if this command service can handle the given command
+     * @param command Command to check
+     * @returns True if command can be handled
+     */
     canHandle(command: GameCommand): boolean {
         return command.verb === 'enter' || this.resolveDirection(command) !== null;
     }
 
+    /**
+     * Handle a movement command
+     * @param command Command to handle
+     * @returns Response indicating success/failure and message
+     * 
+     * Error Cases:
+     * - Invalid direction
+     * - No exit in direction
+     * - Exit blocked by required flags
+     * - Too dark to move
+     */
     async handle(command: GameCommand): Promise<CommandResponse> {
-        // Try directional movement first
         const direction = this.resolveDirection(command);
         if (direction) {
             return this.movementMechanics.handleMovement(direction);
@@ -58,20 +106,26 @@ export class MovementCommandService {
         };
     }
 
+    /**
+     * Get command suggestions based on current context
+     * @param command Partial command to get suggestions for
+     * @returns Array of suggested command completions
+     */
     async getSuggestions(command: GameCommand): Promise<string[]> {
-        if (command.verb === 'enter' && !command.object) {
-            const scene = this.sceneService.getCurrentScene();
-            if (!scene?.objects || !this.checkLightInScene()) {
-                return [];
-            }
-            // Return names of visible objects that might be enterable
-            return Object.values(scene.objects)
-                .filter(obj => this.lightMechanics.isObjectVisible(obj))
-                .map(obj => obj.name);
+        // For 'go' or 'move' commands without object, suggest all directions
+        if ((command.verb === 'go' || command.verb === 'move') && !command.object) {
+            return ['north', 'south', 'east', 'west', 'up', 'down'];
         }
+
+        // For directional commands, get available exits
         return this.movementMechanics.getAvailableExits();
     }
 
+    /**
+     * Resolve a command into a valid direction
+     * @param command Command to resolve
+     * @returns Resolved direction or null if invalid
+     */
     protected resolveDirection(command: GameCommand): string | null {
         let direction = command.verb;
         
