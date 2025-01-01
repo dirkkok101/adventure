@@ -1,4 +1,4 @@
-import { Scene, SceneObject, SceneInteraction } from '../../models/game-state.model';
+import { Scene, SceneInteraction, SceneObject } from "../../models";
 
 export const westOfHouse: Scene = {
     id: 'westOfHouse',

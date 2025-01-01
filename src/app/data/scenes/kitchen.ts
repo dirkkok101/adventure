@@ -1,4 +1,5 @@
-import { Scene } from '../../models/game-state.model';
+import { Scene } from "../../models";
+
 
 export const kitchen: Scene = {
     id: 'kitchen',

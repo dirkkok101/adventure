@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Scene, SceneExit } from '../../models/game-state.model';
+import { Scene } from "../../../models"';
 
 @Injectable({
     providedIn: 'root'

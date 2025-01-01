@@ -1,6 +1,5 @@
 import { Injectable } from '@angular/core';
-import { GameCommand, CommandResponse } from '../../../models/game-state.model';
-import { SceneService } from '../../scene.service';
+import { SceneMechanicsService } from '../../mechanics/scene-mechanics.service';
 import { GameStateService } from '../../game-state.service';
 import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
 import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.service';
@@ -10,6 +9,7 @@ import { ErrorResponse } from '../bases/command-types';
 import { BaseCommandService } from '../bases/base-command.service';
 import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
 import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
+import { GameCommand, CommandResponse } from '../../../models';
 
 @Injectable({
     providedIn: 'root'
@@ -17,7 +17,7 @@ import { ContainerMechanicsService } from '../../mechanics/container-mechanics.s
 export class ClimbCommandService extends BaseCommandService {
     constructor(
         gameState: GameStateService,
-        sceneService: SceneService,
+        sceneService: SceneMechanicsService,
         flagMechanics: FlagMechanicsService,
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,

@@ -1,4 +1,6 @@
-import { Scene, SceneObject, SceneInteraction } from '../../models/game-state.model';
+import { Scene } from "../../models";
+import { SceneInteraction, SceneObject } from "../../models";
+
 
 export const closet: Scene = {
     id: 'closet',

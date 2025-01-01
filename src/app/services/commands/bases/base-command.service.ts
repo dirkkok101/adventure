@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
-import { GameCommand, SceneObject, CommandResponse } from '../../../models/game-state.model';
 import { GameStateService } from '../../game-state.service';
-import { SceneService } from '../../scene.service';
+import { SceneMechanicsService } from '../../mechanics/scene-mechanics.service';
 import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
 import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.service';
 import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
@@ -9,12 +8,31 @@ import { InventoryMechanicsService } from '../../mechanics/inventory-mechanics.s
 import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
 import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
 import { ICommandService, ScoringOptions, ErrorResponse, SuccessResponse } from './command-types';
+import { GameCommand, CommandResponse, SceneObject } from '../../../models';
 
+/**
+ * Base class for all command services in the game.
+ * Provides common command handling infrastructure and access to game mechanics.
+ * 
+ * Key Responsibilities:
+ * - Command handling infrastructure
+ * - Mechanics service access
+ * - Standard error responses
+ * - Base suggestion functionality
+ * 
+ * Dependencies:
+ * All mechanics services are injected but should be used through their respective
+ * specialized services rather than directly in commands when possible.
+ * 
+ * Usage:
+ * Extend this class to create specific command handlers.
+ * Override canHandle() and handle() methods for command-specific logic.
+ */
 @Injectable()
 export abstract class BaseCommandService implements ICommandService {
     constructor(
         protected gameState: GameStateService,
-        protected sceneService: SceneService,
+        protected sceneService: SceneMechanicsService,
         protected flagMechanics: FlagMechanicsService,
         protected progress: ProgressMechanicsService,
         protected lightMechanics: LightMechanicsService,
@@ -23,47 +41,35 @@ export abstract class BaseCommandService implements ICommandService {
         protected containerMechanics: ContainerMechanicsService
     ) {}
 
+    /**
+     * Determines if this command service can handle the given command
+     * @param command Command to check
+     * @returns True if this service can handle the command
+     */
     abstract canHandle(command: GameCommand): boolean;
 
+    /**
+     * Handles the execution of a game command
+     * @param command Command to execute
+     * @returns Promise resolving to command execution result
+     */
     abstract handle(command: GameCommand): Promise<CommandResponse>;
 
-    protected async checkVisibility(object: SceneObject): Promise<boolean> {
-        return this.lightMechanics.isObjectVisible(object) || await this.inventoryMechanics.hasItem(object.id);
+    /**
+     * Provides command suggestions based on current game state
+     * Override in derived classes for command-specific suggestions
+     * @param command Partial command to get suggestions for
+     * @returns Array of suggested command completions
+     */
+    async getSuggestions(command: GameCommand): Promise<string[]> {
+        return [];
     }
 
-    protected checkLightInScene(): boolean {
-        const scene = this.sceneService.getCurrentScene();
-        return scene ? (this.lightMechanics.isLightPresent() || !!scene.light) : false;
-    }
-
-    protected async findObject(objectName: string): Promise<SceneObject | null> {
-        const scene = this.sceneService.getCurrentScene();
-        if (!scene) return null;
-
-        // Check inventory first
-        const inventoryItems = this.inventoryMechanics.listInventory();
-        for (const itemId of inventoryItems) {
-            const item = this.sceneService.findObjectById(itemId);
-            if (item && item.name.toLowerCase() === objectName.toLowerCase()) {
-                return item;
-            }
-        }
-
-        // Then check scene
-        const objects = scene.objects || {};
-        const sceneObjects = Object.values(objects);
-        
-        // Find matching objects
-        for (const obj of sceneObjects) {
-            if (obj.name.toLowerCase() === objectName.toLowerCase() && 
-                await this.checkVisibility(obj)) {
-                return obj;
-            }
-        }
-
-        return null;
-    }
-
+    /**
+     * Standard error response for missing object in command
+     * @param verb Command verb that needs an object
+     * @returns Error response
+     */
     protected noObjectError(verb: string): CommandResponse {
         return { 
             success: false, 
@@ -72,6 +78,10 @@ export abstract class BaseCommandService implements ICommandService {
         };
     }
 
+    /**
+     * Standard error response for missing current scene
+     * @returns Error response
+     */
     protected noSceneError(): CommandResponse {
         return { 
             success: false, 
@@ -80,6 +90,10 @@ export abstract class BaseCommandService implements ICommandService {
         };
     }
 
+    /**
+     * Standard error response for dark conditions
+     * @returns Error response
+     */
     protected tooDarkError(): CommandResponse {
         return {
             success: false,
@@ -88,6 +102,11 @@ export abstract class BaseCommandService implements ICommandService {
         };
     }
 
+    /**
+     * Standard error response for object not found
+     * @param objectName Name of object that wasn't found
+     * @returns Error response
+     */
     protected objectNotFoundError(objectName: string): CommandResponse {
         return { 
             success: false, 
@@ -96,26 +115,17 @@ export abstract class BaseCommandService implements ICommandService {
         };
     }
 
+    /**
+     * Standard error response for invalid interaction
+     * @param verb Attempted action
+     * @param objectName Target object name
+     * @returns Error response
+     */
     protected cannotInteractError(verb: string, objectName: string): CommandResponse {
         return { 
             success: false, 
             message: `You can't ${verb} the ${objectName}.`,
             incrementTurn: false 
         };
-    }
-
-    async getSuggestions(command: GameCommand): Promise<string[]> {
-        console.log('BaseObjectCommandService.getSuggestions called');
-        // Only suggest objects if we have a verb
-        if (!command.verb) {
-            return [];
-        }
-
-        // Only suggest objects if we don't have one yet
-        if (command.object) {
-            return [];
-        }
-
-        return [];
     }
 }

@@ -1,30 +1,47 @@
-import { Injectable } from '@angular/core';
-import { GameStateService } from './game-state.service';
-import { SceneService } from './scene.service';
-import { CommandService } from './commands/command.service';
-import { SaveLoadService } from './save-load.service';
-import { GameTextService } from './game-text.service';
-import { ProgressMechanicsService } from './mechanics/progress-mechanics.service';
-import { GameInitializationService } from './game-initialization.service';
-import { GameState, Scene, SceneObject } from '../models/game-state.model';
-import { Observable } from 'rxjs';
-import { FlagMechanicsService } from './mechanics/flag-mechanics.service';
+import { Injectable } from "@angular/core";
+import { Observable } from "rxjs";
+import { SidebarData } from "../components/game/game-sidebar/game-sidebar.component";
+import { CommandService } from "./commands/command.service";
+import { GameInitializationService } from "./game-initialization.service";
+import { GameStateService } from "./game-state.service";
+import { GameTextService } from "./game-text.service";
+import { FlagMechanicsService } from "./mechanics/flag-mechanics.service";
+import { ProgressMechanicsService } from "./mechanics/progress-mechanics.service";
+import { SaveLoadService } from "./save-load.service";
+import { SceneMechanicsService } from "./mechanics/scene-mechanics.service";
+import { GameState, Scene, SceneObject } from "../models";
 
-interface SidebarData {
-    commands: string;
-    objects: string;
-    exits: string;
-    moves: number;
-    score: number;
-}
-
+/**
+ * Main game orchestration service responsible for coordinating game flow and state management.
+ * Acts as the central hub for game operations, coordinating between various services and mechanics.
+ * 
+ * Key responsibilities:
+ * - Game initialization and state management
+ * - Command processing and execution
+ * - Scene navigation and state updates
+ * - Game saving and loading
+ * - Score and progress tracking
+ * - UI text management
+ */
 @Injectable({
     providedIn: 'root'
 })
 export class GameService {
+    /**
+     * Constructs a new GameService instance.
+     * 
+     * @param gameState GameStateService instance for managing game state
+     * @param sceneService SceneService instance for scene management
+     * @param commandService CommandService instance for command processing
+     * @param saveLoad SaveLoadService instance for game saving and loading
+     * @param gameText GameTextService instance for UI text management
+     * @param progress ProgressMechanicsService instance for score and progress tracking
+     * @param gameInit GameInitializationService instance for game initialization
+     * @param flagMechanics FlagMechanicsService instance for flag management
+     */
     constructor(
         private gameState: GameStateService,
-        private sceneService: SceneService,
+        private sceneService: SceneMechanicsService,
         private commandService: CommandService,
         private saveLoad: SaveLoadService,
         private gameText: GameTextService,
@@ -33,6 +50,11 @@ export class GameService {
         private flagMechanics: FlagMechanicsService
     ) {}
 
+    /**
+     * Initializes a new game session.
+     * Sets up initial game state, scene, and player position.
+     * @throws Error if initialization fails
+     */
     async initializeGame(): Promise<void> {
         try {
             await this.gameInit.initializeGame();
@@ -44,7 +66,8 @@ export class GameService {
     }
 
     /**
-     * Get an observable of the game state. Use this in components for reactive UI updates.
+     * Get an observable of the game state for reactive UI updates
+     * @returns Observable of the current GameState
      */
     getCurrentState$(): Observable<GameState> {
         return this.gameState.state$;
@@ -58,6 +81,11 @@ export class GameService {
         return this.gameState.getCurrentState();
     }
 
+    /**
+     * Process and execute a player command
+     * Coordinates between CommandService for parsing/execution and GameText for output
+     * @param input The raw command string from the player
+     */
     async processCommand(input: string): Promise<void> {
         if (!input.trim()) {
             return;
@@ -84,6 +112,11 @@ export class GameService {
         }
     }
 
+    /**
+     * Process and execute a player input
+     * Coordinates between processCommand for command processing and GameText for output
+     * @param input The raw input string from the player
+     */
     async processInput(input: string): Promise<void> {
         try {
             await this.processCommand(input);
@@ -93,6 +126,11 @@ export class GameService {
         }
     }
 
+    /**
+     * Get suggestions for the player based on the current game state
+     * @param input The raw input string from the player
+     * @returns Array of suggestion strings
+     */
     async getSuggestions(input: string): Promise<string[]> {
         console.log('GameService.getSuggestions called with:', input);
         const suggestions = await this.commandService.getSuggestions(input);
@@ -100,6 +138,11 @@ export class GameService {
         return suggestions;
     }
 
+    /**
+     * Start a new game session
+     * Initializes game state, scene, and player position
+     * @throws Error if initialization fails
+     */
     async startNewGame(): Promise<void> {
         try {
             await this.gameInit.startNewGame();
@@ -111,6 +154,11 @@ export class GameService {
         }
     }
 
+    /**
+     * Load a saved game session
+     * Restores game state, scene, and player position from saved data
+     * @returns True if loading is successful, false otherwise
+     */
     async loadGame(): Promise<boolean> {
         try {
             const success = await this.saveLoad.loadGame();
@@ -129,6 +177,11 @@ export class GameService {
         }
     }
 
+    /**
+     * Save the current game session
+     * Saves game state, scene, and player position to storage
+     * @returns True if saving is successful, false otherwise
+     */
     async saveGame(): Promise<boolean> {
         try {
             await this.saveLoad.saveGame();
@@ -140,6 +193,10 @@ export class GameService {
         }
     }
 
+    /**
+     * Check if a saved game session exists
+     * @returns True if a saved game exists, false otherwise
+     */
     async hasSavedGame(): Promise<boolean> {
         try {
             return await this.saveLoad.hasSavedGame();
@@ -149,6 +206,11 @@ export class GameService {
         }
     }
 
+    /**
+     * Reset the game to its initial state
+     * Clears saved game data and resets game state, scene, and player position
+     * @throws Error if reset fails
+     */
     async resetGame(): Promise<void> {
         try {
             this.saveLoad.clearSavedGame();
@@ -160,12 +222,18 @@ export class GameService {
         }
     }
 
+    /**
+     * Get the current game text
+     * @returns Observable of the current game text
+     */
     getGameText() {
         return this.gameText.getGameText$();
     }
 
     /**
      * Get all known items in a scene, including visible objects and items in open containers
+     * @param scene The current scene
+     * @returns Array of known items
      */
     private async getKnownItems(scene: Scene): Promise<SceneObject[]> {
         if (!scene.objects) return [];
@@ -192,6 +260,8 @@ export class GameService {
 
     /**
      * Get available commands based on scene state and known items
+     * @param scene The current scene
+     * @returns Array of available commands
      */
     private async getAvailableCommands(scene: Scene): Promise<string[]> {
         // Default commands always available
@@ -250,6 +320,8 @@ export class GameService {
 
     /**
      * Get sidebar data combining all scene information
+     * @param state The current game state
+     * @returns SidebarData object with formatted display strings
      */
     async getSidebarData(state: GameState): Promise<SidebarData> {
         const scene = this.sceneService.getScene(state.currentScene);

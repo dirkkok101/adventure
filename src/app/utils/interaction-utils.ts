@@ -1,4 +1,4 @@
-import { GameState, SceneInteraction } from '../models/game-state.model';
+import { GameState } from "../../../models"';
 
 export function processInteraction(state: GameState, interaction: SceneInteraction): void {
     // Grant flags

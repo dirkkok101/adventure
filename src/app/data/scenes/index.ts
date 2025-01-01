@@ -1,4 +1,4 @@
-import { Scene } from '../../models/game-state.model';
+
 import { westOfHouse } from './west-of-house';
 import { northOfHouse } from './north-of-house';
 import { southOfHouse } from './south-of-house';
@@ -8,6 +8,7 @@ import { forest } from './forest';
 import { livingRoom } from './living-room';
 import { cellar } from './cellar';
 import { attic } from './attic';
+import { Scene } from '../../models';
 
 export const scenes: { [key: string]: Scene } = {
     westOfHouse,

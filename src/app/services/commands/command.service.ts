@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { GameCommand } from '../../models/game-state.model';
+import { GameCommand, CommandResponse } from '../../models';
 import { MovementCommandService } from './navigation-commands/movement-command.service';
 import { InventoryCommandService } from './container-commands/inventory-command.service';
 import { DropObjectCommandService } from './object-commands/drop-object-command.service';
@@ -12,213 +12,286 @@ import { ReadObjectCommandService } from './object-commands/read-object-command.
 import { TurnLightSourceOnOffCommandService } from './light-source-commands/turn-light-source-on-off-command.service';
 import { ClimbCommandService } from './navigation-commands/climb-command.service';
 import { GameTextService } from '../game-text.service';
+import { CommandHandler } from './command-handler.interface';
 
-interface CommandHandler {
-    canHandle(command: GameCommand): boolean;
-    handle(command: GameCommand): Promise<{ success: boolean; message: string; incrementTurn: boolean }>;
-    getSuggestions?(command: GameCommand): Promise<string[]> | string[];
-}
-
-const DIRECTION_ALIASES: { [key: string]: string } = {
-    'n': 'north',
-    's': 'south',
-    'e': 'east',
-    'w': 'west',
-    'u': 'up',
-    'd': 'down'
-};
-
-const DIRECTIONS = new Set([
-    'north', 'south', 'east', 'west', 'up', 'down',
-    'n', 's', 'e', 'w', 'u', 'd'
-]);
-
-const VERB_ALIASES: { [key: string]: string } = {
-    'l': 'look',
-    'i': 'inventory',
-    'x': 'examine',
-    'get': 'take',
-    'grab': 'take',
-    'place': 'put',
-    'check': 'examine',
-    'go': 'enter'
-};
-
+/**
+ * Service responsible for processing and routing game commands.
+ * Acts as a facade for all command handling in the game.
+ * 
+ * Key Responsibilities:
+ * - Command parsing and normalization
+ * - Command routing to appropriate handlers
+ * - Command suggestion aggregation
+ * - Error handling and recovery
+ * 
+ * Command Processing Flow:
+ * 1. Parse raw input into GameCommand
+ * 2. Normalize verbs (aliases, directions)
+ * 3. Route to appropriate handler
+ * 4. Process handler response
+ * 
+ * Error Handling:
+ * - Invalid commands return friendly messages
+ * - Handler errors are caught and logged
+ * - System maintains stable state on error
+ */
 @Injectable({
     providedIn: 'root'
 })
 export class CommandService {
-    private commandHandlers: CommandHandler[];
+    /** Map of direction shortcuts to full direction names */
+    private static readonly DIRECTION_ALIASES: Readonly<Record<string, string>> = {
+        'n': 'north',
+        's': 'south',
+        'e': 'east',
+        'w': 'west',
+        'u': 'up',
+        'd': 'down'
+    };
+
+    /** Set of valid movement directions */
+    private static readonly DIRECTIONS: ReadonlySet<string> = new Set([
+        'north', 'south', 'east', 'west', 'up', 'down',
+        'n', 's', 'e', 'w', 'u', 'd'
+    ]);
+
+    /** Map of verb shortcuts to full verb names */
+    private static readonly VERB_ALIASES: Readonly<Record<string, string>> = {
+        'l': 'look',
+        'i': 'inventory',
+        'x': 'examine',
+        'get': 'take',
+        'grab': 'take',
+        'place': 'put',
+        'check': 'examine',
+        'go': 'enter'
+    };
+
+    /** List of registered command handlers */
+    private readonly commandHandlers: CommandHandler[];
 
     constructor(
-        private movement: MovementCommandService,
-        private inventory: InventoryCommandService,
-        private drop: DropObjectCommandService,
-        private look: LookCommandService,
-        private examine: ExamineCommandService,
-        private openClose: OpenCloseContainerCommandService,
-        private take: TakeObjectCommandService,
-        private put: PutCommandService,
-        private read: ReadObjectCommandService,
-        private turn: TurnLightSourceOnOffCommandService,
-        private climb: ClimbCommandService,
-        private gameText: GameTextService,
+        private readonly movement: MovementCommandService,
+        private readonly inventory: InventoryCommandService,
+        private readonly drop: DropObjectCommandService,
+        private readonly look: LookCommandService,
+        private readonly examine: ExamineCommandService,
+        private readonly openClose: OpenCloseContainerCommandService,
+        private readonly take: TakeObjectCommandService,
+        private readonly put: PutCommandService,
+        private readonly read: ReadObjectCommandService,
+        private readonly turn: TurnLightSourceOnOffCommandService,
+        private readonly climb: ClimbCommandService,
+        private readonly gameText: GameTextService,
     ) {
-        console.log('CommandService constructor - injected services:', {
-            movement, inventory, drop, look, examine, openClose, take, put, read, turn, climb
-        });
-
-        // Only add handlers that implement the CommandHandler interface
-        this.commandHandlers = [
-            movement,
-            inventory,
-            drop,
-            look,
-            examine,
-            openClose,
-            take,
-            put,
-            read,
-            turn,
-            climb
-        ].filter(handler => 
-            typeof handler.canHandle === 'function' && 
-            typeof handler.handle === 'function'
-        );
-        
-        console.log('Registered command handlers:', 
-            this.commandHandlers.map(h => ({
-                name: h.constructor.name,
-                hasCanHandle: typeof h.canHandle === 'function',
-                hasHandle: typeof h.handle === 'function',
-                hasGetSuggestions: typeof h.getSuggestions === 'function'
-            }))
-        );
+        // Register command handlers that implement the required interface
+        this.commandHandlers = this.initializeHandlers();
     }
 
-    async processInput(input: string): Promise<{ success: boolean; message?: string; incrementTurn: boolean }> {
-        const command = this.parseCommand(input.toLowerCase());
-        if (!command) {
-            return { 
-                success: false, 
-                message: "I don't understand that command.", 
-                incrementTurn: false 
-            };
-        }
-
-        // Resolve verb aliases
-        command.verb = VERB_ALIASES[command.verb] || command.verb;
-
-        // Handle movement commands
-        if (DIRECTIONS.has(command.verb)) {
-            command.verb = DIRECTION_ALIASES[command.verb] || command.verb;
-            return this.movement.handle(command);
-        }
-
-        // Find appropriate command handler
-        for (const handler of this.commandHandlers) {
-            if (handler.canHandle(command)) {
-                try {
-                    const result = await handler.handle(command);
-                    return result;
-                } catch (error) {
-                    console.error('Error handling command:', error);
-                    return {
-                        success: false,
-                        message: "Something went wrong processing that command.",
-                        incrementTurn: false
-                    };
-                }
+    /**
+     * Process a raw input string into a game command and execute it
+     * @param input Raw input string from user
+     * @returns Command execution result
+     */
+    async processInput(input: string): Promise<CommandResponse> {
+        try {
+            const command = this.parseCommand(input?.toLowerCase());
+            if (!command) {
+                return this.createErrorResponse('invalidCommand');
             }
-        }
 
-        return {
-            success: false,
-            message: "I don't know how to do that.",
-            incrementTurn: false
-        };
+            // Normalize command verb
+            command.verb = CommandService.VERB_ALIASES[command.verb] || command.verb;
+
+            // Handle movement commands
+            if (CommandService.DIRECTIONS.has(command.verb)) {
+                command.verb = CommandService.DIRECTION_ALIASES[command.verb] || command.verb;
+                return this.movement.handle(command);
+            }
+
+            // Find and execute appropriate handler
+            const handler = this.findHandler(command);
+            if (!handler) {
+                return this.createErrorResponse('unknownCommand');
+            }
+
+            return await handler.handle(command);
+        } catch (error) {
+            console.error('Error processing command:', error);
+            return this.createErrorResponse('systemError');
+        }
     }
 
-    parseCommand(input: string): GameCommand | null {
-        console.log('CommandService.parseCommand called with:', input);
-        if (!input) return null;
+    /**
+     * Parse raw input string into a structured game command
+     * @param input Raw input string
+     * @returns Parsed command or null if invalid
+     */
+    private parseCommand(input: string): GameCommand | null {
+        if (!input?.trim()) return null;
 
-        const parts = input.toLowerCase().trim().split(/\s+/);
-        let verb = parts[0];
+        const parts = input.trim().split(/\s+/);
+        const verb = this.normalizeVerb(parts[0]);
         
-        // Check for direction shortcuts
-        if (DIRECTIONS.has(verb)) {
-            console.log('Found direction shortcut:', verb);
-            verb = 'go';
-        } else {
-            // Check verb aliases
-            const aliasedVerb = VERB_ALIASES[verb];
-            console.log('Checking verb alias:', verb, '->', aliasedVerb);
-            verb = aliasedVerb || verb;
-        }
-        
-        const command: GameCommand = {
+        return {
             verb,
             object: parts.slice(1).join(' '),
             originalInput: input
         };
-        console.log('Parsed command:', command);
-        return command;
     }
 
+    /**
+     * Get command suggestions based on current input
+     * @param input Current input string
+     * @returns Array of suggested command completions
+     */
     async getSuggestions(input: string): Promise<string[]> {
-        console.log('CommandService.getSuggestions called with:', input);
-        const command = this.parseCommand(input.toLowerCase());
-        console.log('Parsed command:', command);
-        if (!command) {
-            console.log('No command parsed, returning empty suggestions');
+        try {
+            const command = this.parseCommand(input?.toLowerCase());
+            if (!command) return [];
+
+            const suggestions = new Set<string>();
+
+            // Add basic verb suggestions for short/empty input
+            if (this.shouldAddBasicSuggestions(command, input)) {
+                this.addBasicSuggestions(suggestions);
+            }
+
+            // Get context-specific suggestions from handlers
+            await this.addHandlerSuggestions(command, suggestions);
+
+            // Filter and sort suggestions
+            return this.filterSuggestions(Array.from(suggestions), input);
+        } catch (error) {
+            console.error('Error getting suggestions:', error);
             return [];
         }
+    }
 
-        const suggestions: string[] = [];
+    /**
+     * Initialize command handlers array
+     * @private
+     */
+    private initializeHandlers(): CommandHandler[] {
+        const handlers = [
+            this.movement,
+            this.inventory,
+            this.drop,
+            this.look,
+            this.examine,
+            this.openClose,
+            this.take,
+            this.put,
+            this.read,
+            this.turn,
+            this.climb
+        ];
 
-        // Add basic verb suggestions if no verb or very short input
-        if (!command.object && (!command.verb || input.length <= 2)) {
-            console.log('Adding basic verb suggestions');
-            suggestions.push(...Object.keys(VERB_ALIASES));
-            suggestions.push(...DIRECTIONS);
+        return handlers.filter(this.isValidHandler);
+    }
+
+    /**
+     * Check if a handler implements required interface
+     * @param handler Potential command handler
+     * @private
+     */
+    private isValidHandler(handler: any): handler is CommandHandler {
+        return typeof handler?.canHandle === 'function' && 
+               typeof handler?.handle === 'function';
+    }
+
+    /**
+     * Find appropriate handler for a command
+     * @param command Command to handle
+     * @private
+     */
+    private findHandler(command: GameCommand): CommandHandler | undefined {
+        return this.commandHandlers.find(handler => handler.canHandle(command));
+    }
+
+    /**
+     * Create standardized error response
+     * @param type Type of error
+     * @private
+     */
+    private createErrorResponse(type: 'invalidCommand' | 'unknownCommand' | 'systemError'): CommandResponse {
+        const messages = {
+            invalidCommand: "I don't understand that command.",
+            unknownCommand: "I don't know how to do that.",
+            systemError: "Something went wrong processing that command."
+        };
+
+        return {
+            success: false,
+            message: messages[type],
+            incrementTurn: false
+        };
+    }
+
+    /**
+     * Normalize verb based on aliases and directions
+     * @param verb Verb to normalize
+     * @private
+     */
+    private normalizeVerb(verb: string): string {
+        if (CommandService.DIRECTIONS.has(verb)) {
+            return 'go';
         }
+        return CommandService.VERB_ALIASES[verb] || verb;
+    }
 
-        // Add context-specific suggestions from handlers
-        console.log('Getting suggestions from handlers for command:', command);
+    /**
+     * Check if basic suggestions should be added
+     * @param command Current command
+     * @param input Raw input
+     * @private
+     */
+    private shouldAddBasicSuggestions(command: GameCommand, input: string): boolean {
+        return !command.object && (!command.verb || input.length <= 2);
+    }
+
+    /**
+     * Add basic verb and direction suggestions
+     * @param suggestions Set to add suggestions to
+     * @private
+     */
+    private addBasicSuggestions(suggestions: Set<string>): void {
+        Object.keys(CommandService.VERB_ALIASES).forEach(verb => suggestions.add(verb));
+        Array.from(CommandService.DIRECTIONS).forEach(dir => suggestions.add(dir));
+    }
+
+    /**
+     * Add suggestions from command handlers
+     * @param command Current command
+     * @param suggestions Set to add suggestions to
+     * @private
+     */
+    private async addHandlerSuggestions(command: GameCommand, suggestions: Set<string>): Promise<void> {
         const handlerSuggestions = await Promise.all(
             this.commandHandlers
-                .filter(handler => {
-                    console.log('Checking if handler has getSuggestions:', handler.constructor.name, !!handler.getSuggestions);
-                    return handler.getSuggestions;
-                })
-                .filter(handler => {
-                    const canHandle = handler.canHandle(command);
-                    console.log('Checking if handler can handle command:', handler.constructor.name, canHandle);
-                    return canHandle;
-                })
+                .filter(handler => handler.getSuggestions && handler.canHandle(command))
                 .map(async handler => {
                     try {
-                        console.log('Getting suggestions from handler:', handler.constructor.name);
-                        const result = await handler.getSuggestions!(command);
-                        console.log('Handler suggestions:', handler.constructor.name, result);
-                        return result;
+                        return await handler.getSuggestions!(command);
                     } catch (error) {
-                        console.error('Error getting suggestions:', error);
+                        console.error('Error getting suggestions from handler:', error);
                         return [];
                     }
                 })
         );
 
-        // Flatten all suggestions into a single array
-        console.log('Flattening handler suggestions:', handlerSuggestions);
-        suggestions.push(...handlerSuggestions.flat());
+        handlerSuggestions.flat().forEach(s => suggestions.add(s));
+    }
 
-        // Filter suggestions to match input
-        const filteredSuggestions = [...new Set(suggestions)]
+    /**
+     * Filter and sort suggestions based on input
+     * @param suggestions Array of suggestions
+     * @param input Current input
+     * @private
+     */
+    private filterSuggestions(suggestions: string[], input: string): string[] {
+        return [...new Set(suggestions)]
             .filter(s => s.toLowerCase().startsWith(input.toLowerCase()))
             .sort();
-        console.log('Final suggestions:', filteredSuggestions);
-        return filteredSuggestions;
     }
 }

@@ -1,23 +1,40 @@
-import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
+import { Injectable } from "@angular/core";
+import { BehaviorSubject } from "rxjs";
 
+/**
+ * Interface for text template key-value pairs
+ */
 interface TextTemplate {
     [key: string]: string;
 }
 
+/**
+ * Interface for text template parameter substitutions
+ */
 interface TextTemplateParams {
     [key: string]: string | number;
 }
 
+/**
+ * Service responsible for managing game text output and templating.
+ * Provides a reactive system for game text updates and standardized message templates.
+ * 
+ * Key responsibilities:
+ * - Game text output management
+ * - Text templating and parameter substitution
+ * - Standard message formatting
+ * - Error and success message handling
+ */
 @Injectable({
     providedIn: 'root'
 })
 export class GameTextService {
     private gameText: string[] = [];
     private gameTextSubject = new BehaviorSubject<string[]>([]);
+    /** Observable stream of game text updates */
     gameText$ = this.gameTextSubject.asObservable();
 
-    // Text templates for different types of messages
+    /** Text templates for different types of messages */
     private readonly templates: TextTemplate = {
         // Landing page messages
         'landing.savedGame': "Saved Game Found\nTurns: {turns} | Moves: {moves} | Score: {score}/{maxScore}",
@@ -76,21 +93,24 @@ export class GameTextService {
     };
 
     /**
-     * Get game output history
-     */
-    getGameText(): string[] {
-        return [...this.gameText];
-    }
-
-    /**
-     * Get game output history as an observable
+     * Get the current game text array
+     * @returns Observable of the current game text array
      */
     getGameText$() {
         return this.gameText$;
     }
 
     /**
-     * Add text to game output history
+     * Get the current game text array
+     * @returns Current game text array
+     */
+    getGameText(): string[] {
+        return [...this.gameText];
+    }
+
+    /**
+     * Add a new line of text to the game output
+     * @param text Text to add
      */
     addText(text: string) {
         this.gameText = [...this.gameText, text];
@@ -98,7 +118,7 @@ export class GameTextService {
     }
 
     /**
-     * Clear game output history
+     * Clear all game text
      */
     clearGameText() {
         this.gameText = [];
@@ -106,7 +126,8 @@ export class GameTextService {
     }
 
     /**
-     * Load game output history
+     * Load game text from an array
+     * @param text Array of text to load
      */
     loadGameText(text: string[]) {
         this.gameText = text;
@@ -114,13 +135,16 @@ export class GameTextService {
     }
 
     /**
-     * Get a text template with parameters filled in
+     * Get a templated message with parameter substitution
+     * @param key Template key
+     * @param params Optional parameters for substitution
+     * @returns Formatted message string
      */
     get(key: string, params?: TextTemplateParams): string {
         const template = this.templates[key];
         if (!template) {
-            console.warn(`Missing text template: ${key}`);
-            return '';
+            console.warn(`No template found for key: ${key}`);
+            return key;
         }
 
         if (!params) {
@@ -133,7 +157,9 @@ export class GameTextService {
     }
 
     /**
-     * Add a text template
+     * Add a new text template
+     * @param key Template key
+     * @param template Template string
      */
     addTemplate(key: string, template: string) {
         this.templates[key] = template;
@@ -141,6 +167,8 @@ export class GameTextService {
 
     /**
      * Check if a template exists
+     * @param key Template key
+     * @returns True if the template exists, false otherwise
      */
     hasTemplate(key: string): boolean {
         return key in this.templates;

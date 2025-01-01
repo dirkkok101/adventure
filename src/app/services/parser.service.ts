@@ -1,11 +1,32 @@
-import { Injectable } from '@angular/core';
-import { GameCommand } from '../models/game-state.model';
-import { verbSynonyms } from '../data/verb-synonyms';
+import { Injectable } from "@angular/core";
+import { verbSynonyms } from "../data/verb-synonyms";
+import { GameCommand } from "../models";
 
+/**
+ * Service responsible for parsing user input into structured game commands.
+ * Handles text normalization, verb synonyms, and command structure parsing.
+ * 
+ * Key responsibilities:
+ * - Parse raw text input into GameCommand objects
+ * - Normalize verbs and object names
+ * - Handle prepositions and multi-part commands
+ * - Support verb synonyms (e.g., "get" = "take")
+ */
 @Injectable({
     providedIn: 'root'
 })
 export class ParserService {
+    /**
+     * Parse a raw input string into a structured GameCommand
+     * Handles verb normalization, object identification, and prepositions
+     * 
+     * Examples:
+     * - "take lamp" -> { verb: "take", object: "lamp" }
+     * - "put book in box" -> { verb: "put", object: "book", preposition: "in", target: "box" }
+     * 
+     * @param input Raw input string from player
+     * @returns Structured GameCommand object
+     */
     parseCommand(input: string): GameCommand {
         const words = input.toLowerCase().trim().split(/\s+/);
         
@@ -50,6 +71,13 @@ export class ParserService {
         };
     }
 
+    /**
+     * Normalize a verb by checking against known synonyms
+     * For example, "get" -> "take", "grab" -> "take"
+     * 
+     * @param verb Raw verb from input
+     * @returns Normalized verb or original if no synonym found
+     */
     private normalizeVerb(verb: string): string {
         // Check direct match first
         if (verbSynonyms[verb]) {
@@ -66,9 +94,16 @@ export class ParserService {
         return verb;
     }
 
-    private normalizeObjectId(input: string): string {
+    /**
+     * Normalize an object identifier by removing articles and extra spaces
+     * For example, "the brass lantern" -> "brass lantern"
+     * 
+     * @param objectId Raw object identifier from input
+     * @returns Normalized object identifier
+     */
+    private normalizeObjectId(objectId: string): string {
         // Convert to camelCase
-        return input.toLowerCase()
+        return objectId.toLowerCase()
             .replace(/[^a-zA-Z0-9 ]/g, '')
             .split(' ')
             .reduce((result, word, index) => 

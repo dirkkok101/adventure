@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
-import { GameCommand, SceneObject, CommandResponse } from '../../../models/game-state.model';
 import { GameStateService } from '../../game-state.service';
-import { SceneService } from '../../scene.service';
+import { SceneMechanicsService } from '../../mechanics/scene-mechanics.service';
 import { LightMechanicsService } from '../../mechanics/light-mechanics.service';
 import { InventoryMechanicsService } from '../../mechanics/inventory-mechanics.service';
 import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
@@ -9,6 +8,7 @@ import { ProgressMechanicsService } from '../../mechanics/progress-mechanics.ser
 import { BaseCommandService } from '../bases/base-command.service';
 import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
 import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
+import { GameCommand, CommandResponse } from '../../../models';
 
 @Injectable({
     providedIn: 'root'
@@ -16,7 +16,7 @@ import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
 export class ReadObjectCommandService extends BaseCommandService {
     constructor(
         gameState: GameStateService,
-        sceneService: SceneService,
+        sceneService: SceneMechanicsService,
         flagMechanics: FlagMechanicsService,
         progress: ProgressMechanicsService,
         lightMechanics: LightMechanicsService,

@@ -1,4 +1,4 @@
-import { Scene, SceneObject } from '../../../models/game-state.model';
+import { Scene } from "../../../models"';
 import { ValidationError } from '../validation-error.model';
 
 export class SceneObjectValidator {

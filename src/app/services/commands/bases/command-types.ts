@@ -1,4 +1,4 @@
-import { CommandResponse, SceneObject, GameCommand } from '../../../models/game-state.model';
+import { GameCommand, CommandResponse, SceneObject } from "../../../models";
 
 export interface ICommandService {
     canHandle(command: GameCommand): boolean;
