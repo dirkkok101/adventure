@@ -50,7 +50,19 @@ import { ScoreMechanicsService } from "./score-mechanics.service";
     providedIn: 'root'
 })
 export class InventoryMechanicsService {
+    /**
+     * Maximum weight that can be carried in inventory
+     * @private
+     */
     private readonly MAX_INVENTORY_WEIGHT = 20; // Default max weight if not specified
+
+    /**
+     * Get the maximum weight that can be carried in inventory
+     * @returns Maximum inventory weight capacity
+     */
+    getMaxInventoryWeight(): number {
+        return this.MAX_INVENTORY_WEIGHT;
+    }
 
     constructor(
         private flagMechanics: FlagMechanicsService,
@@ -136,7 +148,7 @@ export class InventoryMechanicsService {
 
         // Check weight limit
         const currentWeight = await this.getCurrentWeight();
-        if (currentWeight + (object.weight || 0) > this.MAX_INVENTORY_WEIGHT) {
+        if (currentWeight + (object.weight || 0) > this.getMaxInventoryWeight()) {
             return false;
         }
 
@@ -174,7 +186,7 @@ export class InventoryMechanicsService {
 
         // Check weight limit
         const currentWeight = await this.getCurrentWeight();
-        if (currentWeight + (object.weight || 0) > this.MAX_INVENTORY_WEIGHT) {
+        if (currentWeight + (object.weight || 0) > this.getMaxInventoryWeight()) {
             return { success: false, message: "That would be too heavy to carry." };
         }
 
@@ -330,7 +342,7 @@ export class InventoryMechanicsService {
 
         // Check weight limit
         const currentWeight = await this.getCurrentWeight();
-        if (currentWeight + (object.weight || 0) > this.MAX_INVENTORY_WEIGHT) {
+        if (currentWeight + (object.weight || 0) > this.getMaxInventoryWeight()) {
             return { success: false, message: "That would be too heavy to carry." };
         }
 

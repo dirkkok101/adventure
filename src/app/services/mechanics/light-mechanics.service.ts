@@ -198,6 +198,15 @@ export class LightMechanicsService {
     }
 
     /**
+     * Checks if an object is a light source
+     * @param objectId ID of object to check
+     * @returns True if object can provide light
+     */
+    isLightSource(objectId: string): boolean {
+        return this.flagMechanics.hasObjectFlag(objectId, 'providesLight');
+    }
+
+    /**
      * Handles turning a light source on or off
      * - Validates the object is a light source
      * - Checks if the source is depleted

@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Scene } from "../../../models"';
+import { Scene, SceneExit } from '../../models';
 
 @Injectable({
     providedIn: 'root'

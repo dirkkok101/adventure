@@ -7,7 +7,7 @@ import { LookCommandService } from './vision-commands/look-command.service';
 import { ExamineCommandService } from './vision-commands/examine-command.service';
 import { OpenCloseContainerCommandService } from './container-commands/open-close-container-command.service';
 import { TakeObjectCommandService } from './object-commands/take-object-command.service';
-import { PutCommandService } from './container-commands/put-command.service';
+import { PutInContainerCommandService } from './container-commands/put-in-container-command.service';
 import { ReadObjectCommandService } from './object-commands/read-object-command.service';
 import { TurnLightSourceOnOffCommandService } from './light-source-commands/turn-light-source-on-off-command.service';
 import { ClimbCommandService } from './navigation-commands/climb-command.service';
@@ -78,7 +78,7 @@ export class CommandService {
         private readonly examine: ExamineCommandService,
         private readonly openClose: OpenCloseContainerCommandService,
         private readonly take: TakeObjectCommandService,
-        private readonly put: PutCommandService,
+        private readonly put: PutInContainerCommandService,
         private readonly read: ReadObjectCommandService,
         private readonly turn: TurnLightSourceOnOffCommandService,
         private readonly climb: ClimbCommandService,

@@ -13,19 +13,18 @@ import { GameTextService } from '../../game-text.service';
 
 /**
  * Command service for handling light source control commands.
- * Manages turning light sources on and off, with proper state management
- * and inventory checks.
+ * Orchestrates between mechanics services to handle turning light sources on/off.
  * 
- * Key Responsibilities:
- * - Handle light source state changes
- * - Validate light source accessibility
- * - Manage battery/fuel status
- * - Coordinate light state with visibility
+ * State Dependencies (via FlagMechanicsService):
+ * - Light source state flags
+ * - Interaction flags
+ * - Object visibility flags
  * 
- * Dependencies:
- * - LightMechanicsService: Light source state management
- * - InventoryMechanicsService: Item possession checks
+ * Service Dependencies:
+ * - LightMechanicsService: Light source state and validation
+ * - InventoryMechanicsService: Light source possession
  * - SceneMechanicsService: Object visibility and location
+ * - FlagMechanicsService: State tracking
  * 
  * Command Format:
  * - "turn [light source] on/off"
@@ -75,7 +74,7 @@ export class TurnLightSourceOnOffCommandService extends BaseCommandService {
     async handle(command: GameCommand): Promise<CommandResponse> {
         try {
             // Validate command format
-            if (!command.preposition || !command.object) {
+            if (!command.verb || !command.object) {
                 return {
                     success: false,
                     message: this.gameText.get('error.turnWhat'),
@@ -83,7 +82,7 @@ export class TurnLightSourceOnOffCommandService extends BaseCommandService {
                 };
             }
 
-            if (!['on', 'off'].includes(command.preposition)) {
+            if (!command.preposition || !['on', 'off'].includes(command.preposition)) {
                 return {
                     success: false,
                     message: this.gameText.get('error.turnOnlyOnOff'),
@@ -92,11 +91,11 @@ export class TurnLightSourceOnOffCommandService extends BaseCommandService {
             }
 
             // Find and validate object
-            const object = await this.findObject(command.object);
+            const object = await this.sceneService.findObject(command.object);
             if (!object) {
                 return {
                     success: false,
-                    message: this.gameText.get('error.objectNotVisible', { object: command.object }),
+                    message: this.gameText.get('error.objectNotFound', { object: command.object }),
                     incrementTurn: false
                 };
             }
@@ -130,7 +129,10 @@ export class TurnLightSourceOnOffCommandService extends BaseCommandService {
     protected async handleInteraction(object: SceneObject, command: GameCommand): Promise<CommandResponse> {
         try {
             // Validate object can be turned on/off
-            if (!object.interactions?.['turn'] && !object.providesLight) {
+            const isLightSource = this.lightMechanics.isLightSource(object.id);
+            const hasTurnInteraction = object.interactions?.['turn'];
+
+            if (!isLightSource && !hasTurnInteraction) {
                 return {
                     success: false,
                     message: this.gameText.get('error.cantTurnOnOff', { object: object.name }),
@@ -139,7 +141,7 @@ export class TurnLightSourceOnOffCommandService extends BaseCommandService {
             }
 
             // Check inventory for portable light sources
-            if (object.providesLight && object.canTake && !await this.inventoryMechanics.hasItem(object.id)) {
+            if (isLightSource && object.canTake && !await this.inventoryMechanics.hasItem(object.id)) {
                 return {
                     success: false,
                     message: this.gameText.get('error.needToTakeFirst', { object: object.name }),
@@ -149,34 +151,70 @@ export class TurnLightSourceOnOffCommandService extends BaseCommandService {
 
             const turningOn = command.preposition === 'on';
 
-            // Special handling for lantern
-            if (object.id === 'lantern' && turningOn) {
-                const batteryStatus = await this.lightMechanics.getLanternBatteryStatus();
-                if (batteryStatus.includes('dead')) {
-                    return {
-                        success: false,
-                        message: batteryStatus,
-                        incrementTurn: false
-                    };
-                }
-            }
-
             // Handle light source state change
-            if (object.providesLight) {
+            if (isLightSource) {
                 const lightResult = await this.lightMechanics.handleLightSource(object.id, turningOn);
+
+                // Handle interaction flags if successful
+                if (lightResult.success && object.interactions?.['turn']) {
+                    const interaction = object.interactions['turn'];
+                    if (interaction.grantsFlags) {
+                        interaction.grantsFlags.forEach(flag => {
+                            this.flagMechanics.setInteractionFlag(flag, object.id);
+                        });
+                    }
+                }
+
                 return {
                     success: lightResult.success,
-                    message: lightResult.message,
+                    message: lightResult.message || '',
                     incrementTurn: lightResult.success
                 };
             }
 
-            // Default case for non-light sources
+            // Handle non-light source turn interaction
+            if (hasTurnInteraction && object.interactions) {
+                const interaction = object.interactions['turn'];
+                
+                // Check required flags
+                if (interaction.requiredFlags && 
+                    !this.flagMechanics.checkFlags(interaction.requiredFlags)) {
+                    return {
+                        success: false,
+                        message: interaction.failureMessage || 
+                            this.gameText.get('error.cantTurnOnOff', { object: object.name }),
+                        incrementTurn: false
+                    };
+                }
+
+                // Set interaction flags
+                if (interaction.grantsFlags) {
+                    interaction.grantsFlags.forEach(flag => {
+                        this.flagMechanics.setInteractionFlag(flag, object.id);
+                    });
+                }
+
+                // Handle scoring
+                const score = interaction.score;
+                if (typeof score === 'number' && !this.flagMechanics.isActionScored(object.id, 'turn')) {
+                    await this.scoreMechanics.addScore(score);
+                    this.flagMechanics.setActionScored(object.id, 'turn');
+                }
+
+                const message = interaction.message || this.gameText.get('success.turnGeneric', { object: object.name });
+                return {
+                    success: true,
+                    message,
+                    incrementTurn: true
+                };
+            }
+
+            // Default case - should never reach here due to earlier validation
             return {
                 success: false,
                 message: this.gameText.get('error.nothingHappens', { 
                     object: object.name, 
-                    action: command.preposition 
+                    action: command.preposition || 'use' 
                 }),
                 incrementTurn: false
             };
@@ -195,45 +233,32 @@ export class TurnLightSourceOnOffCommandService extends BaseCommandService {
      * @param command Partial command to get suggestions for
      * @returns Array of suggested command completions
      */
-    async getSuggestions(command: GameCommand): Promise<string[]> {
-        try {
-            if (!command.verb) {
-                return [];
-            }
-
-            const suggestions = new Set<string>();
-
-            // If no object specified, suggest light sources
-            if (!command.object) {
-                const scene = await this.sceneService.getCurrentScene();
-                const visibleObjects = await this.sceneService.getVisibleObjects(scene);
-                const inventory = await this.inventoryMechanics.listInventory();
-
-                // Add visible light sources from scene
-                for (const obj of visibleObjects) {
-                    if (obj.providesLight) {
-                        suggestions.add(obj.name.toLowerCase());
-                    }
-                }
-
-                // Add light sources from inventory
-                for (const id of inventory) {
-                    const obj = await this.sceneService.findObjectById(id);
-                    if (obj?.providesLight) {
-                        suggestions.add(obj.name.toLowerCase());
-                    }
-                }
-            }
-            // If object but no preposition, suggest on/off
-            else if (!command.preposition) {
-                suggestions.add('on');
-                suggestions.add('off');
-            }
-
-            return Array.from(suggestions);
-        } catch (error) {
-            console.error('Error getting turn command suggestions:', error);
+    override async getSuggestions(command: GameCommand): Promise<string[]> {
+        if (!command.verb || command.preposition) {
             return [];
         }
+
+        const scene = this.sceneService.getCurrentScene();
+        if (!scene || !await this.lightMechanics.isLightPresent()) {
+            return [];
+        }
+
+        const visibleObjects = this.sceneService.getVisibleObjects(scene);
+        
+        const turnableObjects = await Promise.all(
+            visibleObjects
+                .filter(obj => 
+                    this.lightMechanics.isLightSource(obj.id) || 
+                    obj.interactions?.['turn']
+                )
+                .map(async obj => ({
+                    object: obj,
+                    visible: await this.lightMechanics.isObjectVisible(obj)
+                }))
+        );
+
+        return turnableObjects
+            .filter(({ visible }) => visible)
+            .map(({ object }) => object.name);
     }
 }

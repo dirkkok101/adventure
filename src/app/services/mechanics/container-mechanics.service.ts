@@ -43,7 +43,6 @@ import { GameTextService } from '../game-text.service';
 export class ContainerMechanicsService {
     constructor(
         private flagMechanics: FlagMechanicsService,
-        private inventoryMechanics: InventoryMechanicsService,
         private sceneService: SceneMechanicsService,
         private gameText: GameTextService
     ) {}
@@ -347,6 +346,97 @@ export class ContainerMechanicsService {
                 container: container.name 
             }),
             incrementTurn: false
+        };
+    }
+
+    /**
+     * Open a container
+     * Updates game state to mark container as open
+     * 
+     * State Effects:
+     * - Sets container open flag via FlagMechanicsService
+     * 
+     * Error Conditions:
+     * - Container does not exist
+     * - Container is locked
+     * - Container is already open
+     * 
+     * @param containerId ID of container to open
+     * @returns CommandResponse indicating success/failure
+     */
+    async openContainer(containerId: string): Promise<CommandResponse> {
+        const container = this.getValidContainer(containerId);
+        if (!container) {
+            return {
+                success: false,
+                message: this.gameText.get('error.invalidContainer'),
+                incrementTurn: false
+            };
+        }
+
+        if (await this.isLocked(containerId)) {
+            return {
+                success: false,
+                message: this.gameText.get('error.containerLocked', { container: container.name }),
+                incrementTurn: false
+            };
+        }
+
+        if (await this.isOpen(containerId)) {
+            return {
+                success: false,
+                message: this.gameText.get('error.containerAlreadyOpen', { container: container.name }),
+                incrementTurn: false
+            };
+        }
+
+        this.flagMechanics.setContainerOpen(containerId, true);
+
+        return {
+            success: true,
+            message: this.gameText.get('success.containerOpened', { container: container.name }),
+            incrementTurn: true
+        };
+    }
+
+    /**
+     * Close a container
+     * Updates game state to mark container as closed
+     * 
+     * State Effects:
+     * - Clears container open flag via FlagMechanicsService
+     * 
+     * Error Conditions:
+     * - Container does not exist
+     * - Container is already closed
+     * 
+     * @param containerId ID of container to close
+     * @returns CommandResponse indicating success/failure
+     */
+    async closeContainer(containerId: string): Promise<CommandResponse> {
+        const container = this.getValidContainer(containerId);
+        if (!container) {
+            return {
+                success: false,
+                message: this.gameText.get('error.invalidContainer'),
+                incrementTurn: false
+            };
+        }
+
+        if (!await this.isOpen(containerId)) {
+            return {
+                success: false,
+                message: this.gameText.get('error.containerAlreadyClosed', { container: container.name }),
+                incrementTurn: false
+            };
+        }
+
+        this.flagMechanics.setContainerOpen(containerId, false);
+
+        return {
+            success: true,
+            message: this.gameText.get('success.containerClosed', { container: container.name }),
+            incrementTurn: true
         };
     }
 }

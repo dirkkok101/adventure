@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
-import { GameState } from "../../../models"';
 import { SaveState } from '../save-load.service';
+import { GameState } from '../../models';
 
 @Injectable({
     providedIn: 'root'

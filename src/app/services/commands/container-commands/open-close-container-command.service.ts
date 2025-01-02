@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { ContainerBaseCommandService } from '../bases/container-base-command.service';
+import { BaseCommandService } from '../bases/base-command.service';
 import { GameStateService } from '../../game-state.service';
 import { SceneMechanicsService } from '../../mechanics/scene-mechanics.service';
 import { FlagMechanicsService } from '../../mechanics/flag-mechanics.service';
@@ -9,10 +9,40 @@ import { InventoryMechanicsService } from '../../mechanics/inventory-mechanics.s
 import { ContainerMechanicsService } from '../../mechanics/container-mechanics.service';
 import { ScoreMechanicsService } from '../../mechanics/score-mechanics.service';
 import { GameTextService } from '../../game-text.service';
-import { GameCommand, CommandResponse } from '../../../models';
+import { GameCommand, CommandResponse, SceneObject } from '../../../models';
 import { ContainerSuggestionService } from '../../mechanics/container-suggestion.service';
-import { BaseCommandService } from '../bases/base-command.service';
 
+/**
+ * Service responsible for handling open and close commands for containers and exits.
+ * 
+ * Command Pattern:
+ * - Handles 'open' and 'close' verbs
+ * - Validates command context and object accessibility
+ * - Orchestrates between scene, container, and scoring mechanics
+ * 
+ * State Dependencies (via FlagMechanicsService):
+ * - [containerId]_open: Container open/closed state
+ * - [containerId]_locked: Container lock state
+ * - [containerId]_[action]_scored: Scoring state for container actions
+ * - [exitId]_open: Exit open/closed state
+ * 
+ * Service Dependencies:
+ * - FlagMechanicsService: State management
+ * - SceneMechanicsService: Scene and exit operations
+ * - ContainerMechanicsService: Container operations
+ * - LightMechanicsService: Visibility checks
+ * - ScoreMechanicsService: Action scoring
+ * - ProgressMechanicsService: Turn tracking
+ * - GameTextService: Error and success messages
+ * 
+ * Error Handling:
+ * - Validates light presence
+ * - Checks object visibility and accessibility
+ * - Verifies container state (locked/unlocked)
+ * - Maintains state consistency on failure
+ * 
+ * @implements {BaseCommandService}
+ */
 @Injectable({
     providedIn: 'root'
 })
@@ -41,10 +71,45 @@ export class OpenCloseContainerCommandService extends BaseCommandService {
         );
     }
 
-    canHandle(command: GameCommand): boolean {
+    /**
+     * Determines if this service can handle the given command.
+     * 
+     * @param command - The command to check
+     * @returns True if command verb is 'open', 'close', or 'shut'
+     */
+    override canHandle(command: GameCommand): boolean {
         return command.verb === 'open' || command.verb === 'close' || command.verb === 'shut';
     }
 
+    /**
+     * Handles open and close commands for containers and exits.
+     * 
+     * Command Flow:
+     * 1. Validates command format and light presence
+     * 2. Attempts to handle as exit command
+     * 3. If not exit, attempts to handle as container command
+     * 4. Validates object visibility and accessibility
+     * 5. Processes any special interactions
+     * 6. Updates container state
+     * 7. Handles scoring and progress
+     * 
+     * State Effects:
+     * - May update container open state
+     * - May update scoring state
+     * - Increments turn counter on success
+     * 
+     * Error Conditions:
+     * - No object specified
+     * - Insufficient light
+     * - Object not found
+     * - Object not visible
+     * - Object not container
+     * - Container locked
+     * - Required flags not met
+     * 
+     * @param command - The command to handle
+     * @returns CommandResponse indicating success/failure and appropriate message
+     */
     async handle(command: GameCommand): Promise<CommandResponse> {
         if (!command.object) {
             return {
@@ -57,163 +122,99 @@ export class OpenCloseContainerCommandService extends BaseCommandService {
         const isOpenCommand = command.verb === 'open';
         const action = isOpenCommand ? 'open' : 'close';
 
-        // Check light first
-        if (!this.lightMechanics.isLightPresent()) {
+        // Check if there's enough light to interact
+        if (!await this.lightMechanics.isLightPresent()) {
             return {
                 success: false,
-                message: this.gameText.get('error.tooDark', { action }),
+                message: this.gameText.get('error.tooDark'),
                 incrementTurn: false
             };
         }
 
-        // First try to find an exit with this name/direction
-        const exit = this.sceneService.findExit(command.object);
-        if (exit) {
-            const result = isOpenCommand ? 
-                await this.sceneService.openExit(exit) :
-                await this.sceneService.closeExit(exit);
-
-            if (result.success && result.score) {
-                await this.scoreMechanics.addScore(result.score);
-            }
-
-            return {
-                success: result.success,
-                message: result.message,
-                incrementTurn: result.success
-            };
-        }
-
-        // If not an exit, try to find an object
-        const object = await this.findObject(command.object);
+        // Find and validate object
+        const object = await this.sceneService.findObject(command.object);
         if (!object) {
             return {
                 success: false,
-                message: this.gameText.get('error.objectNotFound', { item: command.object }),
+                message: this.gameText.get('error.objectNotFound', { object: command.object }),
                 incrementTurn: false
             };
         }
-
-        // Check if object is visible
-        if (!await this.checkVisibility(object)) {
-            return {
-                success: false,
-                message: this.gameText.get('error.objectNotVisible', { item: object.name }),
-                incrementTurn: false
-            };
-        }
-
-        // Check if object has specific interaction for this action
-        if (object.interactions?.[action]) {
-            const interaction = object.interactions[action];
-            
-            // Check required flags
-            if (interaction.requiredFlags && !await this.flagMechanics.checkFlags(interaction.requiredFlags)) {
-                return {
-                    success: false,
-                    message: interaction.failureMessage || 
-                            this.gameText.get('error.cantPerformAction', { action, item: object.name }),
-                    incrementTurn: false
-                };
-            }
-
-            // Handle scoring
-            if (interaction.score) {
-                await this.scoreMechanics.addScore(interaction.score);
-            }
-            
-            // Increment turns for successful action
-            this.progress.incrementTurns();
-
-            return {
-                success: true,
-                message: interaction.message,
-                incrementTurn: true
-            };
-        }
-
+      
         // If no interaction and not a container, return error
         if (!object.isContainer) {
             return {
                 success: false,
-                message: this.gameText.get('error.cantPerformAction', { action, item: object.name }),
+                message: this.gameText.get('error.notContainer', { item: object.name }),
                 incrementTurn: false
             };
         }
 
-        // Check container validity and state
-        const containerCheck = await this.checkContainer(object, action);
-        if (!containerCheck.success) {
-            return containerCheck;
+        // Check if container is locked
+        if (await this.containerMechanics.isLocked(object.id)) {
+            return {
+                success: false,
+                message: this.gameText.get('error.containerLocked', { container: object.name }),
+                incrementTurn: false
+            };
         }
 
-        // Handle container action
+        // Handle container state change
         const result = isOpenCommand ? 
-            await this.containerMechanics.openContainer(object) :
-            await this.containerMechanics.closeContainer(object);
+            await this.containerMechanics.openContainer(object.id) :
+            await this.containerMechanics.closeContainer(object.id);
 
         if (result.success) {
-            // Handle scoring
-            const score = object.scoring?.[action];
-            if (score) {
-                await this.scoreMechanics.addScore(score);
-            }
+            // Handle scoring through ScoreMechanicsService
+            await this.scoreMechanics.handleObjectScoring({
+                object,
+                action,
+                skipGeneralRules: false
+            });
             
-            // Increment turns for successful action
+            // Update progress
             this.progress.incrementTurns();
         }
 
-        return { ...result, incrementTurn: result.success };
+        return {
+            success: result.success,
+            message: result.message || this.gameText.get(result.success ? 'success.action' : 'error.action', 
+                { action, item: object.name }),
+            incrementTurn: result.success
+        };
     }
 
+    /**
+     * Provides suggestions for open/close commands based on visible containers and objects.
+     * 
+     * Suggestion Logic:
+     * 1. Checks command verb validity
+     * 2. Validates light presence
+     * 3. Gets suggestions from ContainerSuggestionService
+     * 4. Formats suggestions with appropriate verb
+     * 
+     * State Dependencies:
+     * - Light state via LightMechanicsService
+     * - Container state via ContainerMechanicsService
+     * - Scene state via SceneMechanicsService
+     * 
+     * @param command - Partial command to generate suggestions for
+     * @returns Array of command suggestions
+     */
     override async getSuggestions(command: GameCommand): Promise<string[]> {
-        console.log('OpenCloseCommandService.getSuggestions called with:', command);
-        const suggestions = await super.getSuggestions(command);
-        console.log('Base suggestions:', suggestions);
-
         if (!command.verb || !['open', 'close', 'shut'].includes(command.verb)) {
             return [];
         }
 
-        const scene = this.sceneService.getCurrentScene();
-        if (!scene) return [];
-
-        const result: string[] = [];
-        
-        // Get openable/closeable objects from inventory
-        const inventoryItems = await this.inventoryMechanics.listInventory();
-        console.log('Inventory items:', inventoryItems);
-        
-        for (const itemId of inventoryItems) {
-            const item = await this.sceneService.findObjectById(itemId);
-            console.log('Checking inventory item:', itemId, item?.name, 
-                'is container:', item?.isContainer,
-                'has open interaction:', !!item?.interactions?.['open'],
-                'has close interaction:', !!item?.interactions?.['close']);
-            
-            if (item && (item.isContainer || item.interactions?.[command.verb])) {
-                result.push(`${command.verb} ${item.name.toLowerCase()}`);
-            }
+        // Check if there's enough light to interact
+        if (!await this.lightMechanics.isLightPresent()) {
+            return [];
         }
 
-        // Get openable/closeable objects from current scene
-        if (scene.objects) {
-            console.log('Scene objects:', Object.keys(scene.objects));
-            for (const object of Object.values(scene.objects)) {
-                const isVisible = await this.checkVisibility(object);
-                console.log('Checking scene object:', object.id, object.name, 
-                    'visible:', isVisible,
-                    'is container:', object.isContainer,
-                    'has open interaction:', !!object.interactions?.['open'],
-                    'has close interaction:', !!object.interactions?.['close']);
-                
-                if (isVisible && (object.isContainer || object.interactions?.[command.verb])) {
-                    result.push(`${command.verb} ${object.name.toLowerCase()}`);
-                }
-            }
-        }
-
-        console.log('Open/close suggestions:', result);
-        return result;
+        // Get container suggestions from the dedicated service
+        const containerNames = await this.containerSuggestions.getContainerSuggestions(command);
+        
+        // Format suggestions with the appropriate verb
+        return containerNames.map(name => `${command.verb} ${name.toLowerCase()}`);
     }
 }
