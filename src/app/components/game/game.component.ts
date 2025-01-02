@@ -44,16 +44,16 @@ export class GameComponent implements OnInit, OnDestroy {
     async ngOnInit() {
         try {
             this.isLoading = true;
-            
+
             // Try to load saved game
-            const hasSave = await this.gameService.hasSavedGame();
+            const hasSave = this.gameService.hasSavedGame();
             if (hasSave) {
-                const loaded = await this.gameService.loadGame();
+                const loaded = this.gameService.loadGame();
                 if (!loaded) {
-                    await this.gameService.startNewGame();
+                    this.gameService.startNewGame();
                 }
             } else {
-                await this.gameService.startNewGame();
+                this.gameService.startNewGame();
             }
 
             // Subscribe to game state changes to update sidebar
@@ -81,7 +81,7 @@ export class GameComponent implements OnInit, OnDestroy {
 
     async onCommandEntered(command: string) {
         try {
-            await this.gameService.processCommand(command);
+            this.gameService.processCommand(command);
             this.gameInput.focus();
         } catch (error) {
             console.error('Error processing command:', error);

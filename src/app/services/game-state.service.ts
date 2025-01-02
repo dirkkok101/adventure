@@ -5,7 +5,7 @@ import { GameState } from "../models";
 /**
  * Core service responsible for managing the game's state.
  * Provides a reactive state management system using RxJS BehaviorSubject.
- * 
+ *
  * Key responsibilities:
  * - Maintains the single source of truth for game state
  * - Provides reactive state updates via Observable
@@ -88,28 +88,6 @@ export class GameStateService {
         this.updateState(state => ({
             ...state,
             currentScene: sceneId
-        }));
-    }
-
-    /**
-     * Set the light state
-     * @param isLit True to turn on the light, false to turn off
-     */
-    setLight(isLit: boolean) {
-        this.updateState(state => ({
-            ...state,
-            light: isLit
-        }));
-    }
-
-    /**
-     * Add an object to the list of known objects
-     * @param objectId ID of the object to add
-     */
-    addKnownObject(objectId: string) {
-        this.updateState(state => ({
-            ...state,
-            knownObjects: new Set([...state.knownObjects, objectId])
         }));
     }
 }

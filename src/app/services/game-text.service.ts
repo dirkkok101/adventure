@@ -18,7 +18,7 @@ interface TextTemplateParams {
 /**
  * Service responsible for managing game text output and templating.
  * Provides a reactive system for game text updates and standardized message templates.
- * 
+ *
  * Key responsibilities:
  * - Game text output management
  * - Text templating and parameter substitution
@@ -41,7 +41,6 @@ export class GameTextService {
         'landing.newGame': "Start a new adventure...",
 
         // Error messages
-        'error.itemNotFound': "You don't see any {item} here.",
         'error.objectNotFound': "You don't see any {item} here.",
         'error.notHoldingItem': "You don't have the {item}.",
         'error.containerNotFound': "You don't see any {container} here.",
@@ -58,6 +57,14 @@ export class GameTextService {
         'error.noEffect': "Nothing happens.",
         'error.actionNotAllowed': "You can't do that right now.",
         'error.cantPerformAction': "You can't {action} the {item}.",
+        'error.noScene': "Error: No current scene found for command {action}.",
+        'error.noObject': "Error: No object or target supplied in command {action}",
+        'error.action': "Unable to {action} the {item}.",
+        'error.itemInInventory': "You already have the {item}.",
+        'error.turnOnlyOnOff': "You can only turn light sources on or off.",
+        'error.cantTurnOnOff': "You can't turn the {item} on or off.'",
+        'error.objectNotVisible': "The {item} isn't visible.",
+      'error.movementDirection': "I don't understand that direction.",
 
         // Success messages
         'success.take': "You take the {item}.",
@@ -65,6 +72,7 @@ export class GameTextService {
         'success.putInContainer': "You put the {item} in the {container}.",
         'success.removeFromContainer': "You take the {item} from the {container}.",
         'success.open': "You open the {item}.",
+      'success.move': "You move the {item}.",
         'success.close': "You close the {item}.",
         'success.read': "You read the {item}.",
         'success.use': "You use the {item}.",
@@ -85,11 +93,26 @@ export class GameTextService {
         // Light messages
         'light.tooDark': "It is pitch dark. You can't see a thing.",
         'light.darkWarning': "It's getting dark. You should find a light source.",
+        'light.notLightSource': "The {item} is not a light source.",
+        'light.isDead': "The {item} is dead.",
+        'light.isOn': "The {item} is now on.",
+        'light.isOff': "The {item} is now off.",
 
         // Movement messages
         'movement.cantGo': "You can't go that way.",
         'movement.blocked': "The way is blocked.",
-        'movement.newRoom': "You move to {room}."
+        'movement.newRoom': "You {action} to {exit}.",
+        'movement.noExit': "You don't see any {exit} here.",
+        'movement.exitNotVisible': "It is too dark to see the {item} clearly.",
+        'movement.exitNotOpenable': "The {exit} can't be {action}ed.",
+        'movement.exitLocked': "The {exit} is locked.",
+        'movement.exitAlreadyInState': "The {exit} is already {action}.",
+        'movement.exitStateChanged': "You {action{ the {exit}.",
+
+      // Scene
+      'scene.objectAlreadyInScene': "{item} is already in the scene.",
+      'scene.addObject': "{item} added to the {scene}.",
+      'scene.removeObject': "{item} removed from the {scene}.",
     };
 
     /**
@@ -156,21 +179,4 @@ export class GameTextService {
         });
     }
 
-    /**
-     * Add a new text template
-     * @param key Template key
-     * @param template Template string
-     */
-    addTemplate(key: string, template: string) {
-        this.templates[key] = template;
-    }
-
-    /**
-     * Check if a template exists
-     * @param key Template key
-     * @returns True if the template exists, false otherwise
-     */
-    hasTemplate(key: string): boolean {
-        return key in this.templates;
-    }
 }

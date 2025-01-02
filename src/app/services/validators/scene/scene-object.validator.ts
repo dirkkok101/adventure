@@ -1,10 +1,10 @@
-import { Scene } from "../../../models"';
+import {Scene, SceneObject} from "../../../models";
 import { ValidationError } from '../validation-error.model';
 
 export class SceneObjectValidator {
     validateSceneObjects(sceneId: string, scene: Scene): ValidationError[] {
         const errors: ValidationError[] = [];
-        
+
         if (!scene.objects) {
             errors.push({
                 scene: sceneId,

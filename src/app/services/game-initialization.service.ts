@@ -1,7 +1,7 @@
 /**
  * Service responsible for initializing and setting up the game environment.
  * Handles loading of initial game state, scenes, and starting new games.
- * 
+ *
  * Key responsibilities:
  * - Game initialization and setup
  * - New game creation
@@ -28,9 +28,9 @@ export class GameInitializationService {
      * Sets up the initial game environment and loads necessary resources.
      * @returns Promise that resolves when initialization is complete
      */
-    async initializeGame(): Promise<void> {
+    initializeGame(): void {
         // Set up initial game state
-        await this.initializeGameState();
+        this.initializeGameState();
     }
 
     /**
@@ -39,7 +39,7 @@ export class GameInitializationService {
      * @throws Error if no start scene is defined
      * @returns Promise that resolves when new game is started
      */
-    async startNewGame(): Promise<void> {
+    startNewGame(): void {
         const startScene = this.sceneService.getStartScene();
         if (!startScene) {
             throw new Error('No start scene defined');
@@ -57,16 +57,16 @@ export class GameInitializationService {
      * Reset game to initial state.
      * Reinitializes game and starts fresh.
      */
-    async resetGame(): Promise<void> {
-        await this.initializeGame();
-        await this.startNewGame();
+    resetGame(): void {
+        this.initializeGame();
+        this.startNewGame();
     }
 
     /**
      * Initialize the game state with default values.
      * @private
      */
-    private async initializeGameState(): Promise<void> {
+    private initializeGameState(): void {
         // Get starting scene
         const startScene = this.sceneService.getStartScene();
         if (!startScene) {

@@ -1,5 +1,5 @@
-import { Scene } from "../../../models"';
 import { ValidationError } from '../validation-error.model';
+import {Scene} from '../../../models';
 
 export class BaseSceneValidator {
     validateScene(sceneId: string, scene: Scene): ValidationError[] {

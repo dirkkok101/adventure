@@ -25,10 +25,10 @@ export class GameInputComponent {
   async onInput(event: Event): Promise<void> {
     const input = (event.target as HTMLInputElement).value.toLowerCase();
     this.currentInput = input;
-    
+
     if (input) {
       console.log('Getting suggestions for:', input);
-      const suggestions = await this.gameService.getSuggestions(input);
+      const suggestions = this.gameService.getSuggestions(input);
       console.log('Got suggestions:', suggestions);
       this.filteredCommands = suggestions.slice(0, 10); // Limit to 10 suggestions
     } else {
@@ -90,4 +90,6 @@ export class GameInputComponent {
       console.error('Error focusing input:', err);
     }
   }
+
+
 }

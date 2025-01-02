@@ -21,7 +21,7 @@ export interface SaveState {
 /**
  * Service responsible for saving and loading game state.
  * Handles persistence of game state and text to browser's localStorage.
- * 
+ *
  * Key responsibilities:
  * - Save current game state and text
  * - Load saved game state and text
@@ -44,7 +44,7 @@ export class SaveLoadService {
      * Creates a clean copy of the state without RxJS observables
      * @throws Error if saving fails
      */
-    async saveGame(): Promise<void> {
+    saveGame(): void {
         try {
             const state = this.gameState.getCurrentState();
             // Create a clean copy of the state without any RxJS observables
@@ -91,7 +91,7 @@ export class SaveLoadService {
      * @returns True if loading succeeds, false if no save exists
      * @throws Error if loading fails
      */
-    async loadGame(): Promise<boolean> {
+    loadGame(): boolean {
         try {
             const savedState = localStorage.getItem(STORAGE_KEY);
             if (!savedState) {
@@ -122,7 +122,7 @@ export class SaveLoadService {
      * Check if a saved game exists in localStorage
      * @returns True if a saved game exists
      */
-    async hasSavedGame(): Promise<boolean> {
+    hasSavedGame(): boolean {
         return !!localStorage.getItem(STORAGE_KEY);
     }
 
