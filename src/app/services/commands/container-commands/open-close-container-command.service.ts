@@ -168,9 +168,6 @@ export class OpenCloseContainerCommandService extends BaseCommandService {
         action,
         skipGeneralRules: false
       });
-
-      // Update progressMechanicsService
-      this.progressMechanicsService.incrementTurns();
     }
 
     return {

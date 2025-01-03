@@ -218,24 +218,7 @@ export class GameService {
     private getKnownItems(scene: Scene): SceneObject[] {
         if (!scene.objects) return [];
 
-        const visibleObjects = this.examinationMechanicsService.getExaminableObjects();
-        const knownItems = [...visibleObjects];
-
-        // Add items from open containers
-        for (const obj of visibleObjects) {
-            if (obj.isContainer && this.containerMechanicsService.isOpen(obj.id)) {
-                const state = this.getCurrentState();
-                const containerContents = state.containers[obj.id] || [];
-                for (const itemId of containerContents) {
-                    const item = scene.objects[itemId];
-                    if (item) {
-                        knownItems.push(item);
-                    }
-                }
-            }
-        }
-
-        return knownItems;
+      return this.examinationMechanicsService.getExaminableObjects();
     }
 
     /**

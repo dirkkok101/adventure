@@ -263,7 +263,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
     if (!container) {
       return {
         success: false,
-        message: this.gameTextService.get('error.invalidContainer'),
+        message: this.gameTextService.get('error.invalidContainer', {container: containerId}),
         incrementTurn: false
       };
     }
@@ -271,7 +271,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
     if (this.isLocked(containerId)) {
       return {
         success: false,
-        message: this.gameTextService.get('error.containerLocked', {container: container.name}),
+        message: this.gameTextService.get('container.locked', {container: container.name}),
         incrementTurn: false
       };
     }
@@ -279,16 +279,18 @@ export class ContainerMechanicsService extends MechanicsBaseService {
     if (this.isOpen(containerId)) {
       return {
         success: false,
-        message: this.gameTextService.get('error.containerAlreadyOpen', {container: container.name}),
+        message: this.gameTextService.get('container.alreadyOpen', {container: container.name}),
         incrementTurn: false
       };
     }
 
     this.setContainerOpen(containerId, true);
 
+    this.getContainerContents(container);
+
     return {
       success: true,
-      message: this.gameTextService.get('success.containerOpened', {container: container.name}),
+      message: this.gameTextService.get('container.open', {container: container.name}),
       incrementTurn: true
     };
   }
@@ -312,7 +314,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
     if (!container) {
       return {
         success: false,
-        message: this.gameTextService.get('error.invalidContainer'),
+        message: this.gameTextService.get('error.invalidContainer', {container: containerId}),
         incrementTurn: false
       };
     }
@@ -320,7 +322,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
     if (!this.isOpen(containerId)) {
       return {
         success: false,
-        message: this.gameTextService.get('error.containerAlreadyClosed', {container: container.name}),
+        message: this.gameTextService.get('container.alreadyClosed', {container: container.name}),
         incrementTurn: false
       };
     }
@@ -329,7 +331,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
 
     return {
       success: true,
-      message: this.gameTextService.get('success.containerClosed', {container: container.name}),
+      message: this.gameTextService.get('container.close', {container: container.name}),
       incrementTurn: true
     };
   }
@@ -351,7 +353,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
    * Get all containers in the current scene
    * @returns Map of container ID to container object
    */
-  private getSceneContainers(): Map<string, SceneObject> {
+  public getSceneContainers(): Map<string, SceneObject> {
     const scene = this.sceneMechanicsService.getCurrentScene();
     const containers = new Map<string, SceneObject>();
 

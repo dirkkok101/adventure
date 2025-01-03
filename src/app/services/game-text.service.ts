@@ -64,7 +64,8 @@ export class GameTextService {
         'error.turnOnlyOnOff': "You can only turn light sources on or off.",
         'error.cantTurnOnOff': "You can't turn the {item} on or off.'",
         'error.objectNotVisible': "The {item} isn't visible.",
-      'error.movementDirection': "I don't understand that direction.",
+        'error.movementDirection': "I don't understand that direction.",
+      'error.invalidContainer': "{container} is not a valid container.",
 
         // Success messages
         'success.take': "You take the {item}.",
@@ -84,6 +85,11 @@ export class GameTextService {
 
         // Container messages
         'container.empty': "The {container} is empty.",
+        'container.locked': "The {container} is locked.",
+      'container.alreadyOpen': "The {container} already open.",
+      'container.alreadyClosed': "The {container} already closed.",
+      'container.open': "You open the {container}.",
+      'container.close': "You close the {container}.",
         'container.contents': "The {container} contains:\n{items}",
 
         // Score messages

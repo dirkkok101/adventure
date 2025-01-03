@@ -113,12 +113,16 @@ export class ExaminationMechanicsService extends MechanicsBaseService {
     const suggestions = new Set<SceneObject>();
 
     for (const obj of Object.values(scene.objects)) {
-      if (!this.canExamine(obj)) {
+      console.log('Examining object:', obj);
+      const canExamineResult = this.canExamine(obj);
+      if (!canExamineResult.success) {
         continue;
       }
 
       suggestions.add(obj);
     }
+
+    console.log('Examinable objects:', suggestions);
 
     return Array.from(suggestions);
   }
