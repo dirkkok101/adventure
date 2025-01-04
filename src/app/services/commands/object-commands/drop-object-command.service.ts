@@ -9,6 +9,8 @@ import {BaseCommandService} from '../base-command.service';
 import {ContainerMechanicsService} from '../../mechanics/container-mechanics.service';
 import {CommandResponse, GameCommand} from '../../../models';
 import {GameTextService} from '../../game-text.service';
+import {ObjectMechanicsService} from '../../mechanics/object-mechanics.service';
+import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
 
 /**
  * Command service for handling drop commands.
@@ -72,9 +74,11 @@ export class DropObjectCommandService extends BaseCommandService {
     progressMechanicsService: ProgressMechanicsService,
     lightMechanicsService: LightMechanicsService,
     inventoryMechanicsService: InventoryMechanicsService,
-    scoreMechanicsService: ScoreMechanicsService,
     containerMechanicsService: ContainerMechanicsService,
-    private gameTextService: GameTextService
+    scoreMechanicsService: ScoreMechanicsService,
+    objectMechanicsService: ObjectMechanicsService,
+    examinationMechanicsService: ExaminationMechanicsService,
+    gameTextService: GameTextService
   ) {
     super(
       gameStateService,
@@ -83,7 +87,10 @@ export class DropObjectCommandService extends BaseCommandService {
       lightMechanicsService,
       inventoryMechanicsService,
       scoreMechanicsService,
-      containerMechanicsService
+      containerMechanicsService,
+      objectMechanicsService,
+      examinationMechanicsService,
+      gameTextService
     );
   }
 

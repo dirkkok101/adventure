@@ -12,6 +12,8 @@ import {GameState, Scene, SceneObject} from "../models";
 import {ContainerMechanicsService} from './mechanics/container-mechanics.service';
 import {MovementMechanicsService} from './mechanics/movement-mechanics.service';
 import {ExaminationMechanicsService} from './mechanics/examination-mechanics.service';
+import {InventoryMechanicsService} from './mechanics/inventory-mechanics.service';
+import {ObjectMechanicsService} from './mechanics/object-mechanics.service';
 
 /**
  * Main game orchestration service responsible for coordinating game flow and state management.
@@ -39,9 +41,8 @@ export class GameService {
      * @param gameTextService GameTextService instance for UI text management
      * @param progressMechanicsService ProgressMechanicsService instance for score and progressMechanicsService tracking
      * @param gameInitializationService GameInitializationService instance for game initialization
-     * @param containerMechanicsService
      * @param movementMechanicsService
-     * @param examinationMechanicsService
+     * @param objectMechanicsService
      */
     constructor(
         private gameStateService: GameStateService,
@@ -51,9 +52,8 @@ export class GameService {
         private gameTextService: GameTextService,
         private progressMechanicsService: ProgressMechanicsService,
         private gameInitializationService: GameInitializationService,
-        private containerMechanicsService: ContainerMechanicsService,
         private movementMechanicsService: MovementMechanicsService,
-        private examinationMechanicsService: ExaminationMechanicsService
+        private objectMechanicsService: ObjectMechanicsService,
     ) {}
 
     /**
@@ -211,17 +211,6 @@ export class GameService {
     }
 
     /**
-     * Get all known items in a scene, including visible objects and items in open containers
-     * @param scene The current scene
-     * @returns Array of known items
-     */
-    private getKnownItems(scene: Scene): SceneObject[] {
-        if (!scene.objects) return [];
-
-      return this.examinationMechanicsService.getExaminableObjects(scene);
-    }
-
-    /**
      * Get available commands based on scene state and known items
      * @param scene The current scene
      * @returns Array of available commands
@@ -234,48 +223,6 @@ export class GameService {
             'examine',
             'help'
         ];
-
-        // Get known items and their states
-        const knownItems = this.getKnownItems(scene);
-
-        // Add item-specific commands based on state
-        for (const item of knownItems) {
-            // Add examine command for the specific item
-            commands.push(`examine ${item.name}`);
-
-            // Container-specific commands
-            if (item.isContainer) {
-                const isOpen = this.containerMechanicsService.isOpen(item.id);
-                commands.push(isOpen ? `close ${item.name}` : `open ${item.name}`);
-
-                // If container is open and has items, add take commands
-                if (isOpen) {
-                    const state = this.getCurrentState();
-                    const contents = state.containers[item.id] || [];
-                    if (contents.length > 0) {
-                        for (const contentId of contents) {
-                            const contentItem = scene.objects?.[contentId];
-                            if (contentItem?.canTake) {
-                                commands.push(`take ${contentItem.name}`);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Add take command if item can be taken
-            if (item.canTake) {
-                commands.push(`take ${item.name}`);
-            }
-        }
-
-        // Add movement commands from available exits
-        const exits = this.movementMechanicsService.getAvailableExits(scene);
-        for (const exit of exits) {
-            commands.push(`go ${exit.direction}`);
-            // Add shorthand directions
-            commands.push(exit.direction);
-        }
 
         // Remove duplicates and sort
         return [...new Set(commands)].sort();
@@ -298,7 +245,7 @@ export class GameService {
             };
         }
 
-        const knownItems = this.getKnownItems(scene);
+        const knownItems = this.objectMechanicsService.getAllKnownObjects(scene);
         const availableCommands = this.getAvailableCommands(scene);
         const availableExits = this.movementMechanicsService.getAvailableExits(scene);
 

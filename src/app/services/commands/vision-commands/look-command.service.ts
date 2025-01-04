@@ -9,6 +9,9 @@ import {ContainerMechanicsService} from '../../mechanics/container-mechanics.ser
 import {ScoreMechanicsService} from '../../mechanics/score-mechanics.service';
 import {GameTextService} from '../../game-text.service';
 import {CommandResponse, GameCommand} from '../../../models';
+import {ObjectMechanicsService} from '../../mechanics/object-mechanics.service';
+import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
+import {MovementMechanicsService} from '../../mechanics/movement-mechanics.service';
 
 /**
  * Command service for handling look/l commands.
@@ -47,7 +50,9 @@ export class LookCommandService extends BaseCommandService {
     inventoryMechanicsService: InventoryMechanicsService,
     containerMechanicsService: ContainerMechanicsService,
     scoreMechanicsService: ScoreMechanicsService,
-    private gameTextService: GameTextService
+    objectMechanicsService: ObjectMechanicsService,
+    examinationMechanicsService: ExaminationMechanicsService,
+    gameTextService: GameTextService
   ) {
     super(
       gameStateService,
@@ -56,7 +61,10 @@ export class LookCommandService extends BaseCommandService {
       lightMechanicsService,
       inventoryMechanicsService,
       scoreMechanicsService,
-      containerMechanicsService
+      containerMechanicsService,
+      objectMechanicsService,
+      examinationMechanicsService,
+      gameTextService
     );
   }
 

@@ -11,6 +11,7 @@ import {SceneMechanicsService} from "../../mechanics/scene-mechanics.service";
 import {ScoreMechanicsService} from "../../mechanics/score-mechanics.service";
 import {BaseCommandService} from "../base-command.service";
 import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
+import {ObjectMechanicsService} from '../../mechanics/object-mechanics.service';
 
 /**
  * Command service for handling 'put' commands that place items into containers.
@@ -65,9 +66,9 @@ export class PutInContainerCommandService extends BaseCommandService {
     inventoryMechanicsService: InventoryMechanicsService,
     containerMechanicsService: ContainerMechanicsService,
     scoreMechanicsService: ScoreMechanicsService,
-    private examinationMechanicsService: ExaminationMechanicsService,
-    private commandSuggestionService: CommandSuggestionService,
-    private gameTextService: GameTextService
+    objectMechanicsService: ObjectMechanicsService,
+    examinationMechanicsService: ExaminationMechanicsService,
+    gameTextService: GameTextService
   ) {
     super(
       gameStateService,
@@ -76,7 +77,10 @@ export class PutInContainerCommandService extends BaseCommandService {
       lightMechanicsService,
       inventoryMechanicsService,
       scoreMechanicsService,
-      containerMechanicsService
+      containerMechanicsService,
+      objectMechanicsService,
+      examinationMechanicsService,
+      gameTextService
     );
   }
 
@@ -261,7 +265,7 @@ export class PutInContainerCommandService extends BaseCommandService {
 
     // If we have 'in' preposition but no target, suggest containers
     if (command.preposition === 'in' && !command.target) {
-      return this.getKnownObjectsNotOwned(scene)
+      return this.objectMechanicsService.getKnownObjectsNotOwned(scene)
         .filter(obj =>
           obj.isContainer
         )

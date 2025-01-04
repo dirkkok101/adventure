@@ -24,41 +24,6 @@ export abstract class MechanicsBaseService
   }
 
   /**
-   * Gets structured data for an object
-   * @param objectId Object ID to get data for
-   * @param key Data key
-   * @returns Parsed data or null if not found
-   */
-  protected getObjectData<T>(objectId: string, key: string): T | null {
-    const dataKey = `${objectId}_${key}`;
-    const data = this.gameStateService.getCurrentState().objectData[dataKey];
-    if (!data) return null;
-
-    try {
-      return JSON.parse(data) as T;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Sets structured data for an object
-   * @param objectId Object ID to store data for
-   * @param key Data key
-   * @param data Data to store
-   */
-  protected setObjectData<T>(objectId: string, key: string, data: T): void {
-    const dataKey = `${objectId}_${key}`;
-    this.gameStateService.updateState(state => ({
-      ...state,
-      objectData: {
-        ...state.objectData,
-        [dataKey]: JSON.stringify(data)
-      }
-    }));
-  }
-
-  /**
    * Check a list of flag conditions
    * Supports complex conditions including:
    * - AND conditions (all flags in array must match)

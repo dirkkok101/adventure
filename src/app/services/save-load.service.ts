@@ -12,9 +12,7 @@ const STORAGE_KEY = 'zork_game_state';
  * Converts Set to array for JSON serialization
  */
 export interface SaveState {
-    gameState: Omit<GameState, 'knownObjects'> & {
-        knownObjects: string[];
-    };
+    gameState: GameState;
     gameText: string[];
 }
 
@@ -51,32 +49,24 @@ export class SaveLoadService {
             const cleanState: GameState = {
                 currentScene: state.currentScene,
                 inventory: { ...state.inventory },
-                containers: { ...state.containers },
                 flags: { ...state.flags },
-                objectData: { ...state.objectData },
                 score: state.score,
                 maxScore: state.maxScore,
                 moves: state.moves,
                 turns: state.turns,
-                knownObjects: new Set<string>(state.knownObjects),
                 gameOver: state.gameOver,
                 gameWon: state.gameWon,
-                light: state.light,
                 trophies: [...state.trophies],
-                sceneState: { ...state.sceneState }
+                sceneState: { ...state.sceneState }  // Scene state contains all scene data now
             };
-
-            // Get just the text array from the service, not the Observable
+    
             const gameText = this.gameText.getGameText();
-
+    
             const saveState: SaveState = {
-                gameState: {
-                    ...cleanState,
-                    knownObjects: Array.from(cleanState.knownObjects)
-                },
+                gameState: cleanState,
                 gameText
             };
-
+    
             localStorage.setItem(STORAGE_KEY, JSON.stringify(saveState));
             this.logger.logSaveState('Game saved', saveState);
         } catch (error) {
@@ -97,20 +87,18 @@ export class SaveLoadService {
             if (!savedState) {
                 return false;
             }
-
+    
             const { gameState, gameText }: SaveState = JSON.parse(savedState);
-
-            // Convert the array back to a Set for knownObjects
+    
+            // No need to convert knownObjects since it's removed
             const loadedState: GameState = {
-                ...gameState,
-                knownObjects: new Set(gameState.knownObjects),
-                objectData: gameState.objectData || {}
+                ...gameState
             };
-
+    
             this.gameState.updateState(() => loadedState);
             this.gameText.loadGameText(gameText);
             this.logger.logState('Game loaded', loadedState);
-
+    
             return true;
         } catch (error) {
             console.error('Error loading game state:', error);

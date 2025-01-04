@@ -10,6 +10,8 @@ import {MoveObjectMechanicsService} from '../../mechanics/move-object-mechanics.
 import {BaseCommandService} from '../base-command.service';
 import {CommandResponse, GameCommand} from '../../../models';
 import {GameTextService} from '../../game-text.service';
+import {ObjectMechanicsService} from '../../mechanics/object-mechanics.service';
+import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
 
 /**
  * Command service for handling object movement commands.
@@ -56,10 +58,12 @@ export class MoveObjectCommandService extends BaseCommandService {
     progressMechanicsService: ProgressMechanicsService,
     lightMechanicsService: LightMechanicsService,
     inventoryMechanicsService: InventoryMechanicsService,
-    scoreMechanicsService: ScoreMechanicsService,
     containerMechanicsService: ContainerMechanicsService,
-    private moveObjectMechanicsService: MoveObjectMechanicsService,
-    private gameTextService: GameTextService
+    scoreMechanicsService: ScoreMechanicsService,
+    objectMechanicsService: ObjectMechanicsService,
+    examinationMechanicsService: ExaminationMechanicsService,
+    gameTextService: GameTextService,
+    private moveObjectMechanicsService: MoveObjectMechanicsService
   ) {
     super(
       gameStateService,
@@ -68,7 +72,10 @@ export class MoveObjectCommandService extends BaseCommandService {
       lightMechanicsService,
       inventoryMechanicsService,
       scoreMechanicsService,
-      containerMechanicsService
+      containerMechanicsService,
+      objectMechanicsService,
+      examinationMechanicsService,
+      gameTextService
     );
   }
 
@@ -192,7 +199,7 @@ override getSuggestions(command: GameCommand): string[] {
   }
 
   // Get all moveable objects from the current scene
-  const moveableObjects = this.getKnownObjectsNotOwned(scene)
+  const moveableObjects = this.objectMechanicsService.getKnownObjectsNotOwned(scene)
     .filter(obj => this.moveObjectMechanicsService.canMoveObject(scene, obj).success);
 
   const verb = this.getPrimaryVerb(command.verb);

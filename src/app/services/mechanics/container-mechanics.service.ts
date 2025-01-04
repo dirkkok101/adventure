@@ -1,6 +1,5 @@
 import {Injectable} from '@angular/core';
 import {CommandResponse, Scene, SceneObject} from '../../models';
-import {SceneMechanicsService} from './scene-mechanics.service';
 import {GameTextService} from '../game-text.service';
 import {GameStateService} from '../game-state.service';
 import {MechanicsBaseService} from './mechanics-base.service';
@@ -35,7 +34,6 @@ import {MechanicsBaseService} from './mechanics-base.service';
 })
 export class ContainerMechanicsService extends MechanicsBaseService {
   constructor(
-    private sceneMechanicsService: SceneMechanicsService,
     private gameTextService: GameTextService,
     gameStateService: GameStateService
   ) {
@@ -108,8 +106,8 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
-    const contentIDs = this.getContainerContentIDs(container.id);
-    if (container.capacity && contentIDs.length >= container.capacity) {
+    const contents = this.getContainerContents(scene, container);
+    if (container.capacity && contents.length >= container.capacity) {
       return {
         success: false,
         message: this.gameTextService.get('error.containerFull', {container: container.name}),
@@ -117,7 +115,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
-    this.setContents(container.id, [...contentIDs, itemId]);
+    container.contents?.push(itemId);
 
     return {
       success: true,
@@ -152,6 +150,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       throw new Error('Invalid scene object');
     }
 
+    // Do we have a valid container object
     if (!container || !container.isContainer) {
       return {
         success: false,
@@ -160,6 +159,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
+    // Check if the container is locked
     if (!this.isLocked(container.id)) {
       return {
         success: false,
@@ -168,6 +168,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
+    // Check if the container is open
     if (!this.isOpen(container.id)) {
       return {
         success: false,
@@ -176,8 +177,9 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
-    const contentIDs = this.getContainerContentIDs(container.id);
-    if (!contentIDs.includes(itemId)) {
+    // Check if the item exists in the container
+    const contents = this.getContainerContents(scene, container);
+    if (!contents.map(obj => obj.id).includes(itemId)) {
       return {
         success: false,
         message: this.gameTextService.get('error.itemNotInContainer', {
@@ -188,7 +190,8 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
-    this.setContents(container.id, contentIDs.filter(id => id !== itemId));
+    // Remove item from container
+    container.contents?.splice(container.contents?.indexOf(itemId), 1);
 
     return {
       success: true,
@@ -209,44 +212,12 @@ export class ContainerMechanicsService extends MechanicsBaseService {
     const containers = this.getSceneContainers(scene);
 
     for (const container of containers) {
-      if (this.getContainerContentIDs(container.id).includes(objectId)) {
+      if (container.contents?.includes(objectId)) {
         return container;
       }
     }
 
     return null;
-  }
-
-  /**
-   * Get a list of SceneObject in a container
-   * @param scene
-   * @param container Container to retrieve contents for
-   * @returns An array of objects in the container
-   */
-  getContainerContents(scene: Scene, container: SceneObject): SceneObject[] {
-    if (!scene || scene.objects === undefined) {
-      throw new Error('Invalid scene object');
-    }
-
-    if (!container.isContainer) {
-      return [];
-    }
-
-    const contentIDs = this.getContainerContentIDs(container.id);
-    if (!contentIDs.length) {
-      return [];
-    }
-
-    // Build list of visible contents with type safety
-    const containerObjects: SceneObject[] = [];
-    for (const id of contentIDs) {
-      const obj = scene.objects[id];
-      if (obj) {
-        containerObjects.push(obj);
-      }
-    }
-
-    return containerObjects;
   }
 
   /**
@@ -365,27 +336,47 @@ export class ContainerMechanicsService extends MechanicsBaseService {
    * Get all containers in the current scene
    * @returns Map of container ID to container object
    */
-  public getSceneContainers(scene:Scene): SceneObject[] {
+  public getSceneContainers(scene: Scene): SceneObject[] {
     const containers: SceneObject[] = [];
 
     if (!scene?.objects) return containers;
 
-    for (const [id, obj] of Object.entries(scene.objects)) {
-      if (obj.isContainer) {
-        containers.push(obj);
-      }
+    for (let container of Object.values(scene.objects)
+      .filter(obj => obj.isContainer)) {
+      containers.push(container);
     }
 
     return containers;
   }
 
   /**
-   * Get the contents of a container
-   * @param containerId ID of container to check
-   * @returns Array of item IDs in the container
+   * Gets the contents of the container
+   * @returns Array of SceneObjects in the container
+   * @param scene
+   * @param container
    */
-  private getContainerContentIDs(containerId: string): string[] {
-    return this.getObjectData<string[]>(containerId, 'contents') || [];
+  getContainerContents(scene: Scene, container: SceneObject): SceneObject[] {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
+    if (!container || container.contents === undefined) {
+      throw new Error('Invalid container object');
+    }
+
+    if (!container.isContainer) {
+      return [];
+    }
+
+    const contentObjects: SceneObject[] = [];
+    for (let objectId of container.contents) {
+      const object = scene?.objects?.[objectId]
+      if (object) {
+        contentObjects.push(object);
+      }
+    }
+
+    return contentObjects;
   }
 
   // Container state methods
@@ -398,12 +389,4 @@ export class ContainerMechanicsService extends MechanicsBaseService {
     }
   }
 
-  /**
-   * Set the contents of a container
-   * @param containerId ID of container to update
-   * @param contents New contents array
-   */
-  private setContents(containerId: string, contents: string[]): void {
-    this.setObjectData(containerId, 'contents', contents);
-  }
 }

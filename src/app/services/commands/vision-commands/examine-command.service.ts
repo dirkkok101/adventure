@@ -10,6 +10,7 @@ import {ScoreMechanicsService} from '../../mechanics/score-mechanics.service';
 import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
 import {GameTextService} from '../../game-text.service';
 import {CommandResponse, GameCommand} from '../../../models';
+import {ObjectMechanicsService} from '../../mechanics/object-mechanics.service';
 
 /**
  * Command service for handling examine/look at commands.
@@ -47,8 +48,9 @@ export class ExamineCommandService extends BaseCommandService {
     inventoryMechanicsService: InventoryMechanicsService,
     containerMechanicsService: ContainerMechanicsService,
     scoreMechanicsService: ScoreMechanicsService,
-    private examinationMechanicsService: ExaminationMechanicsService,
-    private gameTextService: GameTextService
+    objectMechanicsService: ObjectMechanicsService,
+    examinationMechanicsService: ExaminationMechanicsService,
+    gameTextService: GameTextService
   ) {
     super(
       gameStateService,
@@ -57,7 +59,10 @@ export class ExamineCommandService extends BaseCommandService {
       lightMechanicsService,
       inventoryMechanicsService,
       scoreMechanicsService,
-      containerMechanicsService
+      containerMechanicsService,
+      objectMechanicsService,
+      examinationMechanicsService,
+      gameTextService
     );
   }
 
@@ -130,7 +135,7 @@ export class ExamineCommandService extends BaseCommandService {
     }
 
     // Get examinable objects
-    const allItems = this.getAllKnownObjects(scene);
+    const allItems = this.objectMechanicsService.getAllKnownObjects(scene);
     const examinableObjects = allItems.filter(obj => this.examinationMechanicsService.canExamine(scene, obj));
 
     const verb = this.getPrimaryVerb(command.verb);

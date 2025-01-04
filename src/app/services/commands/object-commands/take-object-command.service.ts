@@ -10,6 +10,7 @@ import {ScoreMechanicsService} from '../../mechanics/score-mechanics.service';
 import {GameTextService} from '../../game-text.service';
 import {CommandResponse, GameCommand} from '../../../models';
 import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
+import {ObjectMechanicsService} from '../../mechanics/object-mechanics.service';
 
 /**
  * Command service for handling take/get commands.
@@ -75,10 +76,11 @@ export class TakeObjectCommandService extends BaseCommandService {
     progressMechanicsService: ProgressMechanicsService,
     lightMechanicsService: LightMechanicsService,
     inventoryMechanicsService: InventoryMechanicsService,
-    scoreMechanicsService: ScoreMechanicsService,
     containerMechanicsService: ContainerMechanicsService,
-    private examinationMechanicsService: ExaminationMechanicsService,
-    private gameTextService: GameTextService
+    scoreMechanicsService: ScoreMechanicsService,
+    objectMechanicsService: ObjectMechanicsService,
+    examinationMechanicsService: ExaminationMechanicsService,
+    gameTextService: GameTextService
   ) {
     super(
       gameStateService,
@@ -87,7 +89,10 @@ export class TakeObjectCommandService extends BaseCommandService {
       lightMechanicsService,
       inventoryMechanicsService,
       scoreMechanicsService,
-      containerMechanicsService
+      containerMechanicsService,
+      objectMechanicsService,
+      examinationMechanicsService,
+      gameTextService
     );
   }
 
@@ -145,7 +150,7 @@ export class TakeObjectCommandService extends BaseCommandService {
     }
 
     // Return the objects in the scene and in open containers, filter out the ones we already have
-    const objectsWeCanTake = this.getKnownObjectsNotOwned(scene);
+    const objectsWeCanTake = this.objectMechanicsService.getKnownObjectsNotOwned(scene);
 
     // Check to ensure the object we want to take is in the list of objects we can take
     const objectToTake = objectsWeCanTake.find(obj => obj.id === object.id);
@@ -218,7 +223,7 @@ export class TakeObjectCommandService extends BaseCommandService {
     }
 
     // Get the known objects in the scene that we don't own
-    const objectsWeCanTake = this.getKnownObjectsNotOwned(scene);
+    const objectsWeCanTake = this.objectMechanicsService.getKnownObjectsNotOwned(scene);
 
     const verb = this.getPrimaryVerb(command.verb);
 

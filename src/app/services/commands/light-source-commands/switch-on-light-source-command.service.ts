@@ -10,6 +10,7 @@ import {ScoreMechanicsService} from '../../mechanics/score-mechanics.service';
 import {CommandResponse, GameCommand} from '../../../models';
 import {GameTextService} from '../../game-text.service';
 import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
+import {ObjectMechanicsService} from '../../mechanics/object-mechanics.service';
 
 /**
  * Command service for handling light source control commands.
@@ -51,10 +52,11 @@ export class SwitchOnLightSourceCommandService extends BaseCommandService {
     progressMechanicsService: ProgressMechanicsService,
     lightMechanicsService: LightMechanicsService,
     inventoryMechanicsService: InventoryMechanicsService,
-    scoreMechanicsService: ScoreMechanicsService,
     containerMechanicsService: ContainerMechanicsService,
-    private examinationMechanicsService: ExaminationMechanicsService,
-    private gameTextService: GameTextService
+    scoreMechanicsService: ScoreMechanicsService,
+    objectMechanicsService: ObjectMechanicsService,
+    examinationMechanicsService: ExaminationMechanicsService,
+    gameTextService: GameTextService
   ) {
     super(
       gameStateService,
@@ -63,7 +65,10 @@ export class SwitchOnLightSourceCommandService extends BaseCommandService {
       lightMechanicsService,
       inventoryMechanicsService,
       scoreMechanicsService,
-      containerMechanicsService
+      containerMechanicsService,
+      objectMechanicsService,
+      examinationMechanicsService,
+      gameTextService
     );
   }
 
@@ -189,7 +194,7 @@ export class SwitchOnLightSourceCommandService extends BaseCommandService {
 
     // If we have a verb but no object, suggest visible light sources
     if (!command.object) {
-      const lightSources = this.getAllKnownObjects(scene)
+      const lightSources = this.objectMechanicsService.getAllKnownObjects(scene)
         .filter(obj => this.lightMechanicsService.isLightSource(obj));
 
       return lightSources

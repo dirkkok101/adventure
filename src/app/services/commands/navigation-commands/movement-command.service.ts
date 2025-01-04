@@ -43,6 +43,8 @@ import {ContainerMechanicsService} from '../../mechanics/container-mechanics.ser
 import {CommandResponse, GameCommand} from '../../../models';
 import {BaseCommandService} from '../base-command.service';
 import {GameTextService} from '../../game-text.service';
+import {ObjectMechanicsService} from '../../mechanics/object-mechanics.service';
+import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
 
 @Injectable({
   providedIn: 'root'
@@ -82,10 +84,12 @@ export class MovementCommandService extends BaseCommandService {
     progressMechanicsService: ProgressMechanicsService,
     lightMechanicsService: LightMechanicsService,
     inventoryMechanicsService: InventoryMechanicsService,
-    scoreMechanicsService: ScoreMechanicsService,
     containerMechanicsService: ContainerMechanicsService,
-    private gameTextService: GameTextService,
-    private movementMechanicsService: MovementMechanicsService
+    scoreMechanicsService: ScoreMechanicsService,
+    objectMechanicsService: ObjectMechanicsService,
+    examinationMechanicsService: ExaminationMechanicsService,
+    gameTextService: GameTextService,
+    private movementMechanicsService: MovementMechanicsService,
   ) {
     super(
       gameStateService,
@@ -94,7 +98,10 @@ export class MovementCommandService extends BaseCommandService {
       lightMechanicsService,
       inventoryMechanicsService,
       scoreMechanicsService,
-      containerMechanicsService
+      containerMechanicsService,
+      objectMechanicsService,
+      examinationMechanicsService,
+      gameTextService
     );
   }
 

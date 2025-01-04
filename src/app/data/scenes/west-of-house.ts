@@ -76,6 +76,7 @@ export const westOfHouse: Scene = {
             isContainer: true,
             isOpen: false,
             capacity: 1,
+            contents: ['leaflet'],
             descriptions: {
                 default: 'There is a small mailbox here.',
                 contents: 'The mailbox contains:',

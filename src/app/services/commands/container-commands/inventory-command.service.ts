@@ -10,6 +10,7 @@ import {LightMechanicsService} from '../../mechanics/light-mechanics.service';
 import {ProgressMechanicsService} from '../../mechanics/progress-mechanics.service';
 import {SceneMechanicsService} from '../../mechanics/scene-mechanics.service';
 import {ScoreMechanicsService} from '../../mechanics/score-mechanics.service';
+import {ObjectMechanicsService} from '../../mechanics/object-mechanics.service';
 
 /**
  * Command service for handling inventory-related commands.
@@ -54,8 +55,9 @@ export class InventoryCommandService extends BaseCommandService {
     inventoryMechanicsService: InventoryMechanicsService,
     containerMechanicsService: ContainerMechanicsService,
     scoreMechanicsService: ScoreMechanicsService,
-    private gameTextService: GameTextService,
-    private examinationMechanicsService: ExaminationMechanicsService
+    objectMechanicsService: ObjectMechanicsService,
+    examinationMechanicsService: ExaminationMechanicsService,
+    gameTextService: GameTextService
   ) {
     super(
       gameStateService,
@@ -64,7 +66,10 @@ export class InventoryCommandService extends BaseCommandService {
       lightMechanicsService,
       inventoryMechanicsService,
       scoreMechanicsService,
-      containerMechanicsService
+      containerMechanicsService,
+      objectMechanicsService,
+      examinationMechanicsService,
+      gameTextService
     );
   }
 

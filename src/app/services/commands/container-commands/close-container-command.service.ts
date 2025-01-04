@@ -10,6 +10,8 @@ import {ScoreMechanicsService} from '../../mechanics/score-mechanics.service';
 import {GameTextService} from '../../game-text.service';
 import {CommandResponse, GameCommand} from '../../../models';
 import {CommandSuggestionService} from '../command-suggestion.service';
+import {ObjectMechanicsService} from '../../mechanics/object-mechanics.service';
+import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
 
 /**
  * Service responsible for handling open and close commands for containers and exits.
@@ -58,23 +60,28 @@ export class CloseContainerCommandService extends BaseCommandService {
   };
 
   constructor(
-    gameState: GameStateService,
-    sceneService: SceneMechanicsService,
-    progress: ProgressMechanicsService,
-    lightMechanics: LightMechanicsService,
-    inventoryMechanics: InventoryMechanicsService,
-    containerMechanics: ContainerMechanicsService,
-    scoreMechanics: ScoreMechanicsService,
-    private gameTextService: GameTextService
+    gameStateService: GameStateService,
+    sceneMechanicsService: SceneMechanicsService,
+    progressMechanicsService: ProgressMechanicsService,
+    lightMechanicsService: LightMechanicsService,
+    inventoryMechanicsService: InventoryMechanicsService,
+    containerMechanicsService: ContainerMechanicsService,
+    scoreMechanicsService: ScoreMechanicsService,
+    objectMechanicsService: ObjectMechanicsService,
+    examinationMechanicsService: ExaminationMechanicsService,
+    gameTextService: GameTextService
   ) {
     super(
-      gameState,
-      sceneService,
-      progress,
-      lightMechanics,
-      inventoryMechanics,
-      scoreMechanics,
-      containerMechanics
+      gameStateService,
+      sceneMechanicsService,
+      progressMechanicsService,
+      lightMechanicsService,
+      inventoryMechanicsService,
+      scoreMechanicsService,
+      containerMechanicsService,
+      objectMechanicsService,
+      examinationMechanicsService,
+      gameTextService
     );
   }
 
@@ -199,11 +206,12 @@ export class CloseContainerCommandService extends BaseCommandService {
 
     // If we have a verb but no object, suggest visible containers
     if (!command.object) {
-      const visibleContainers = this.getKnownObjectsNotOwned(scene)
-        .filter(obj => obj.isContainer);
+      const visibleContainers = this.objectMechanicsService.getKnownObjectsNotOwned(scene)
+        .filter(obj => {
+          return obj.isContainer;});
 
       return visibleContainers.map(container =>
-        `${verb} ${container}`
+        `${verb} ${container.name}`
       );
     }
 

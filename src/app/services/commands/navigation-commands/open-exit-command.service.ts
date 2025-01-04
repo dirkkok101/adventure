@@ -10,6 +10,8 @@ import {ScoreMechanicsService} from '../../mechanics/score-mechanics.service';
 import {CommandResponse, GameCommand} from '../../../models';
 import {GameTextService} from '../../game-text.service';
 import {MovementMechanicsService} from '../../mechanics/movement-mechanics.service';
+import {ObjectMechanicsService} from '../../mechanics/object-mechanics.service';
+import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
 
 /**
  * Service responsible for handling commands related to opening exits (doors, gates, etc.) in scenes.
@@ -50,9 +52,11 @@ export class OpenExitCommandService extends BaseCommandService {
     progressMechanicsService: ProgressMechanicsService,
     lightMechanicsService: LightMechanicsService,
     inventoryMechanicsService: InventoryMechanicsService,
-    scoreMechanicsService: ScoreMechanicsService,
     containerMechanicsService: ContainerMechanicsService,
-    private gameTextService: GameTextService,
+    scoreMechanicsService: ScoreMechanicsService,
+    objectMechanicsService: ObjectMechanicsService,
+    examinationMechanicsService: ExaminationMechanicsService,
+    gameTextService: GameTextService,
     private movementMechanicsService: MovementMechanicsService,
   ) {
     super(
@@ -62,7 +66,10 @@ export class OpenExitCommandService extends BaseCommandService {
       lightMechanicsService,
       inventoryMechanicsService,
       scoreMechanicsService,
-      containerMechanicsService
+      containerMechanicsService,
+      objectMechanicsService,
+      examinationMechanicsService,
+      gameTextService
     );
   }
 

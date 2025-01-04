@@ -8,6 +8,11 @@ import {ScoreMechanicsService} from '../mechanics/score-mechanics.service';
 import {ContainerMechanicsService} from '../mechanics/container-mechanics.service';
 import {CommandVerbs, ICommandService} from './command-types';
 import {CommandResponse, GameCommand, Scene, SceneObject} from '../../models';
+import {ObjectMechanicsService} from '../mechanics/object-mechanics.service';
+import {GameTextService} from '../game-text.service';
+import {ExaminationMechanicsService} from '../mechanics/examination-mechanics.service';
+import {MoveObjectMechanicsService} from '../mechanics/move-object-mechanics.service';
+import {MovementMechanicsService} from '../mechanics/movement-mechanics.service';
 
 /**
  * Base class for all command services in the game.
@@ -36,7 +41,10 @@ export abstract class BaseCommandService implements ICommandService {
     protected lightMechanicsService: LightMechanicsService,
     protected inventoryMechanicsService: InventoryMechanicsService,
     protected scoreMechanicsService: ScoreMechanicsService,
-    protected containerMechanicsService: ContainerMechanicsService
+    protected containerMechanicsService: ContainerMechanicsService,
+    protected objectMechanicsService: ObjectMechanicsService,
+    protected examinationMechanicsService: ExaminationMechanicsService,
+    protected gameTextService: GameTextService
   ) {
   }
 
@@ -129,28 +137,6 @@ export abstract class BaseCommandService implements ICommandService {
     return this.getVerbSuggestions(command.verb);
   }
 
-  getAllKnownObjects(scene: Scene): SceneObject[] {
-    // Get all readable objects from both inventory, scene and open containers
-    const inventoryItems = this.inventoryMechanicsService.listInventory(scene);
-    const knownSceneItems = this.getKnownObjectsNotOwned(scene);
 
-    return [...inventoryItems, ...knownSceneItems];
-  }
-
-  getKnownObjectsNotOwned(scene: Scene): SceneObject[] {
-    const sceneItems = this.sceneMechanicsService.getSceneObjects(scene)
-      .filter(obj => !this.inventoryMechanicsService.hasItem(obj));
-
-    const containerItems: SceneObject[] = [];
-    const openContainers = this.containerMechanicsService.getSceneContainers(scene)
-      .filter(container => container.isOpen);
-    for (let container of openContainers) {
-      const contents = this.containerMechanicsService.getContainerContents(scene, container)
-        .filter(obj => !this.inventoryMechanicsService.hasItem(obj));
-      containerItems.push(...contents);
-    }
-
-    return [...sceneItems, ...containerItems];
-  }
 
 }

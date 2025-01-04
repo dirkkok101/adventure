@@ -20,17 +20,13 @@ export class GameStateService {
     private state: GameState = {
         currentScene: '',
         inventory: {},
-        containers: {},
         flags: {},
-        objectData: {},
         score: 0,
         maxScore: 100,
         moves: 0,
         turns: 0,
-        knownObjects: new Set<string>(),
         gameOver: false,
         gameWon: false,
-        light: false,
         trophies: [],
         sceneState: {}
     };

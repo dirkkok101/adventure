@@ -10,6 +10,7 @@ import {ScoreMechanicsService} from '../../mechanics/score-mechanics.service';
 import {CommandResponse, GameCommand, SceneObject} from '../../../models';
 import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
 import {GameTextService} from '../../game-text.service';
+import {ObjectMechanicsService} from '../../mechanics/object-mechanics.service';
 
 /**
  * Command service for handling read commands.
@@ -68,10 +69,11 @@ export class ReadObjectCommandService extends BaseCommandService {
     progressMechanicsService: ProgressMechanicsService,
     lightMechanicsService: LightMechanicsService,
     inventoryMechanicsService: InventoryMechanicsService,
-    scoreMechanicsService: ScoreMechanicsService,
     containerMechanicsService: ContainerMechanicsService,
-    private examinationMechanicsService: ExaminationMechanicsService,
-    private gameTextService: GameTextService
+    scoreMechanicsService: ScoreMechanicsService,
+    objectMechanicsService: ObjectMechanicsService,
+    examinationMechanicsService: ExaminationMechanicsService,
+    gameTextService: GameTextService
   ) {
     super(
       gameStateService,
@@ -80,7 +82,10 @@ export class ReadObjectCommandService extends BaseCommandService {
       lightMechanicsService,
       inventoryMechanicsService,
       scoreMechanicsService,
-      containerMechanicsService
+      containerMechanicsService,
+      objectMechanicsService,
+      examinationMechanicsService,
+      gameTextService
     );
   }
 
@@ -191,7 +196,7 @@ export class ReadObjectCommandService extends BaseCommandService {
       return [];
     }
 
-    const allItems = this.getAllKnownObjects(scene);
+    const allItems = this.objectMechanicsService.getAllKnownObjects(scene);
 
     // Filter out only the objects we can read
     const readableItems = allItems.filter(item => this.examinationMechanicsService.canRead(scene, item));

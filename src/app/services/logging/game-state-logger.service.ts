@@ -13,13 +13,11 @@ export class GameStateLoggerService {
             flags: state.flags,
             score: state.score,
             moves: state.moves,
-            knownObjects: Array.from(state.knownObjects),
-            containers: state.containers
         });
     }
 
     logSaveState(message: string, state: SaveState) {
-        console.log(`[SaveState] ${message}:`, 
+        console.log(`[SaveState] ${message}:`,
             JSON.stringify(state));
     }
 
