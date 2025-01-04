@@ -4,39 +4,44 @@ import {GameStateService} from '../../game-state.service';
 import {SceneMechanicsService} from '../../mechanics/scene-mechanics.service';
 import {ProgressMechanicsService} from '../../mechanics/progress-mechanics.service';
 import {LightMechanicsService} from '../../mechanics/light-mechanics.service';
-import {InventoryMechanicsService} from '../../mechanics/inventory-mechanics.service';
 import {ContainerMechanicsService} from '../../mechanics/container-mechanics.service';
+import {InventoryMechanicsService} from '../../mechanics/inventory-mechanics.service';
 import {ScoreMechanicsService} from '../../mechanics/score-mechanics.service';
-import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
-import {GameTextService} from '../../game-text.service';
 import {CommandResponse, GameCommand} from '../../../models';
+import {GameTextService} from '../../game-text.service';
+import {MovementMechanicsService} from '../../mechanics/movement-mechanics.service';
 
 /**
- * Command service for handling examine/look at commands.
+ * Service responsible for handling commands related to opening exits (doors, gates, etc.) in scenes.
  *
- * Key Responsibilities:
- * - Handle examine/look at commands
- * - Validate examination targets
- * - Provide examination suggestions
+ * State Dependencies (via FlagMechanicsService):
+ * - Exit open states ([direction]_open)
+ * - Exit locked states ([direction]_locked)
+ * - Exit openable states ([direction]_openable)
+ * - Scene visibility and light conditions
  *
- * Dependencies:
- * - ExaminationMechanicsService: Core examination logic
- * - SceneMechanicsService: Scene and object access
- * - LightMechanicsService: Visibility checks
+ * Error Conditions:
+ * - No object specified in command
+ * - Scene too dark to interact
+ * - Exit not found in current scene
+ * - Exit cannot be operated (locked, not openable, etc.)
+ * - Exit requires light but scene is dark
+ *
+ * @implements {BaseCommandService}
  */
 @Injectable({
   providedIn: 'root'
 })
-export class ExamineCommandService extends BaseCommandService {
+export class CloseExitCommandService extends BaseCommandService {
   /**
    * Primary verbs for command
    */
-  readonly verbs = ['examine'] as const;
+  readonly verbs = ['close'] as const;
   /**
    * Verb aliases mapping
    */
   protected override readonly verbAliases: { [key: string]: string } = {
-    'x': 'examine'
+    'c': 'close'
   };
 
   constructor(
@@ -45,10 +50,10 @@ export class ExamineCommandService extends BaseCommandService {
     progressMechanicsService: ProgressMechanicsService,
     lightMechanicsService: LightMechanicsService,
     inventoryMechanicsService: InventoryMechanicsService,
-    containerMechanicsService: ContainerMechanicsService,
     scoreMechanicsService: ScoreMechanicsService,
-    private examinationMechanicsService: ExaminationMechanicsService,
-    private gameTextService: GameTextService
+    containerMechanicsService: ContainerMechanicsService,
+    private gameTextService: GameTextService,
+    private movementMechanicsService: MovementMechanicsService,
   ) {
     super(
       gameStateService,
@@ -61,6 +66,22 @@ export class ExamineCommandService extends BaseCommandService {
     );
   }
 
+  /**
+   * Handles open commands for exits by orchestrating between services
+   *
+   * State Effects:
+   * - Updates exit open state
+   *
+   * Error Conditions:
+   * - Returns error if scene is too dark
+   * - Returns error if exit not found
+   * - Returns error if exit cannot be operated
+   * - Returns error if exit is locked
+   * - Returns error if exit is not openable
+   *
+   * @param command The command to handle
+   * @returns Command response with success/failure and message
+   */
   handle(command: GameCommand): CommandResponse {
     // Validate command format
     if (!command.object) {
@@ -92,27 +113,36 @@ export class ExamineCommandService extends BaseCommandService {
       };
     }
 
-    // Find and validate object
-    const object = this.sceneMechanicsService.findObjectByName(scene, command.object);
-    if (!object) {
+    const exit = this.movementMechanicsService.getExit(scene, command.object);
+
+    if (!exit) {
       return {
         success: false,
-        message: this.gameTextService.get('error.objectNotFound', {item: command.object}),
+        message: this.gameTextService.get('movement.noExit', {item: command.object}),
         incrementTurn: false
       };
     }
 
-    // Check if we can examine the object
-    const canExamine = this.examinationMechanicsService.canExamine(scene, object);
-    if (!canExamine.success) {
-      return canExamine;
+    const currentlyOpen = this.movementMechanicsService.isExitOpen(exit.direction);
+
+    // Check if already in desired state
+    if (!currentlyOpen) {
+      return {
+        success: false,
+        message: this.gameTextService.get('movement.exitAlreadyInState', {
+          exit: exit.direction,
+          action: command.verb
+        }),
+        incrementTurn: false
+      };
     }
 
-    // Get the object description
-    const description = this.examinationMechanicsService.getObjectDescription(scene, object, true);
+    // Update exit state
+    this.movementMechanicsService.setExitOpen(exit.direction, false);
+
     return {
       success: true,
-      message: description,
+      message: this.gameTextService.get('movement.exitStateChanged', {exit: exit.direction, action: command.verb}),
       incrementTurn: true
     };
   }
@@ -129,21 +159,19 @@ export class ExamineCommandService extends BaseCommandService {
       return [];
     }
 
-    // Get examinable objects
-    const allItems = this.getAllKnownObjects(scene);
-    const examinableObjects = allItems.filter(obj => this.examinationMechanicsService.canExamine(scene, obj));
+    const exits = this.movementMechanicsService.getAvailableExits(scene);
 
     const verb = this.getPrimaryVerb(command.verb);
 
-    // If we have a partial object, filter suggestions
+    // If we have a partial object, filter the suggestions
     if (command.object) {
       const partialObject = command.object.toLowerCase();
-      return examinableObjects
-        .filter(obj => obj.name.toLowerCase().startsWith(partialObject))
-        .map(obj => `${verb} ${obj.name}`);
+      return exits
+        .filter(obj => obj.direction.toLowerCase().startsWith(partialObject))
+        .map(obj => `${verb} ${obj.direction}`);
     }
 
-    // Return all possible object combinations
-    return examinableObjects.map(obj => `${verb} ${obj.name}`);
+    // Return all possible objects if no partial object specified
+    return exits.map(obj => `${verb} ${obj.direction}`);
   }
 }

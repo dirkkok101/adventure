@@ -204,13 +204,8 @@ export class SceneMechanicsService extends MechanicsBaseService {
    * @throws Error if current scene is not found
    */
   getCurrentScene(): Scene {
-    try {
       const state = this.gameStateService.getCurrentState();
       return this.getScene(state.currentScene);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error occurred';
-      throw new Error(`Failed to get current scene: ${message}`);
-    }
   }
 
   /**
@@ -254,68 +249,22 @@ export class SceneMechanicsService extends MechanicsBaseService {
     }
   }
 
-  /**
-   * Find an object in the current scene by name
-   * Tries exact match first, then partial match
-   *
-   * @param objectName Name of object to find
-   * @returns Found object or null
-   * @throws Error if object is not found
-   */
-  findObject(objectName: string): SceneObject | null {
-    const scene = this.getCurrentScene();
-    if (!scene?.objects) {
-      throw new Error('No current scene');
-    }
 
-    // First try exact match
-    const exactMatch = Object.values(scene.objects).find(obj =>
-      obj.name.toLowerCase() === objectName.toLowerCase()
-    );
-    if (exactMatch) return exactMatch;
-
-    // Then try partial match
-    const partialMatch = Object.values(scene.objects).find(obj =>
-      obj.name.toLowerCase().includes(objectName.toLowerCase())
-    );
-    return partialMatch || null;
-  }
-
-  /**
-   * Find an object by its ID in any scene
-   *
-   * @param objectId ID of the object to find
-   * @returns Found object or null
-   * @throws Error if object is not found
-   */
-  findObjectById(objectId: string): SceneObject | null {
-    // Search all scenes for the object
-    for (const scene of Object.values(this.scenes)) {
-      if (scene.objects?.[objectId]) {
-        return scene.objects[objectId];
-      }
-    }
-    throw new Error(`Object not found: ${objectId}`);
-  }
 
   /**
    * Add an object to the current scene
    *
+   * @param scene
    * @param object Object to add to the scene
    * @returns Success status and message
    * @throws Error if scene is not found or object is already in scene
    */
-  addObjectToScene(object: SceneObject): CommandResponse {
-    const scene = this.getCurrentScene();
-    if (!scene) {
-      return {
-        success: false,
-        message: this.gameTextService.get('error.noScene'),
-        incrementTurn: false
-      };
+  addObjectToScene(scene: Scene, object: SceneObject): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
     }
 
-    const sceneObject = this.findObjectById(object.id);
+    const sceneObject = this.findObjectById(scene, object.id);
     if (sceneObject) {
       return {
         success: false,
@@ -343,31 +292,27 @@ export class SceneMechanicsService extends MechanicsBaseService {
   /**
    * Remove an object from the current scene
    *
-   * @param objectId ID of object to remove
+   * @param scene
+   * @param object
    * @returns Success status and message
    * @throws Error if scene is not found or object is not in scene
    */
-  removeObjectFromScene(objectId: string): CommandResponse {
-    const scene = this.getCurrentScene();
-    if (!scene) {
-      return {
-        success: false,
-        message: this.gameTextService.get('error.noScene'),
-        incrementTurn: false
-      };
+  removeObjectFromScene(scene: Scene, object: SceneObject): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
     }
 
-    const sceneObject = this.findObjectById(objectId);
+    const sceneObject = this.findObjectById(scene, object.id);
     if (sceneObject === null) {
       return {
         success: false,
-        message: this.gameTextService.get('scene.objectNotInScene', {item: objectId}),
+        message: this.gameTextService.get('scene.objectNotInScene', {item: object.name}),
         incrementTurn: false
       };
     }
 
     // Remove from scene objects
-    const {[objectId]: _, ...remainingObjects} = scene.objects || {};
+    const {[object.id]: _, ...remainingObjects} = scene.objects || {};
     scene.objects = remainingObjects;
 
     return {
@@ -375,5 +320,66 @@ export class SceneMechanicsService extends MechanicsBaseService {
       message: this.gameTextService.get('scene.removeObject', {item: sceneObject.name, scene: scene.name}),
       incrementTurn: true
     };
+  }
+
+  /**
+   * Find an object in the scene by name
+   * Tries exact match first, then partial match
+   *
+   * @param scene the scene to search
+   * @param objectName Name of object to find
+   * @returns Found object or null
+   */
+  findObjectByName(scene: Scene, objectName: string): SceneObject | null {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
+    // First try exact match
+    const exactMatch = Object.values(scene.objects).find(obj =>
+      obj.name.toLowerCase() === objectName.toLowerCase()
+    );
+    if (exactMatch) return exactMatch;
+
+    // Then try partial match
+    const partialMatch = Object.values(scene.objects).find(obj =>
+      obj.name.toLowerCase().includes(objectName.toLowerCase())
+    );
+    return partialMatch || null;
+  }
+
+  /**
+   * Find an object by its ID in the scene
+   *
+   * @param scene the scene to search
+   * @param objectId ID of the object to find
+   * @returns Found object or null
+   */
+  findObjectById(scene: Scene, objectId: string): SceneObject | null {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
+    if (scene.objects?.[objectId]) {
+      return scene.objects[objectId];
+    }
+
+    return null;
+  }
+
+  getSceneObjects(scene: Scene): SceneObject[] {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
+    const sceneObjects: SceneObject[] = [];
+
+    for (const [id, obj] of Object.entries(scene.objects)) {
+      if (!obj.isContainer) {
+        sceneObjects.push(obj);
+      }
+    }
+
+    return sceneObjects;
   }
 }

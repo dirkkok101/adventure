@@ -3,7 +3,7 @@ import {LightMechanicsService} from './light-mechanics.service';
 import {SceneMechanicsService} from './scene-mechanics.service';
 import {ScoreMechanicsService} from './score-mechanics.service';
 import {GameTextService} from '../game-text.service';
-import {CommandResponse, Scene, SceneExit} from '../../models';
+import {CommandResponse, Scene, SceneExit, SceneObject} from '../../models';
 import {GameStateService} from '../game-state.service';
 import {MechanicsBaseService} from './mechanics-base.service';
 
@@ -59,6 +59,7 @@ export class MovementMechanicsService extends MechanicsBaseService {
 
   /**
    * Validate if movement in a direction is possible
+   * @param scene
    * @param direction Direction to validate
    * @returns CommandResponse indicating if movement is possible
    *
@@ -66,22 +67,16 @@ export class MovementMechanicsService extends MechanicsBaseService {
    * - Light state
    * - Exit requirements
    */
-  validateMovement(direction: string): CommandResponse {
+  validateMovement(scene: Scene, direction: string): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
     // Check light
-    if (!this.lightMechanicsService.isLightPresent()) {
+    if (!this.lightMechanicsService.isLightPresent(scene)) {
       return {
         success: false,
         message: this.gameTextService.get('error.tooDarkMove'),
-        incrementTurn: false
-      };
-    }
-
-    // Get current scene
-    const scene = this.sceneMechanicsService.getCurrentScene();
-    if (!scene) {
-      return {
-        success: false,
-        message: this.gameTextService.get('error.sceneNotFound'),
         incrementTurn: false
       };
     }
@@ -114,7 +109,8 @@ export class MovementMechanicsService extends MechanicsBaseService {
 
   /**
    * Handle movement in a direction
-   * @param direction Direction to move
+   * @param scene
+   * @param exit
    * @returns CommandResponse with result of movement
    *
    * State Effects:
@@ -122,24 +118,28 @@ export class MovementMechanicsService extends MechanicsBaseService {
    * - Updates current scene
    * - Sets exit used flag
    */
-  handleMovement(direction: string): CommandResponse {
-    // Validate movement
-    const validation = this.validateMovement(direction);
-    if (!validation.success) {
-      return validation;
+  moveToExit(scene: Scene, exit: SceneExit): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
     }
 
-    const scene = this.sceneMechanicsService.getCurrentScene();
-    const exit = scene!.exits!.find(e => e.direction.toLowerCase() === direction.toLowerCase())!;
+    const isExit = this.isExit(scene, exit.direction);
+    if (!isExit) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.noExit'),
+        incrementTurn: false
+      };
+    }
 
-    // Handle scoring
-    this.handleMovementScoring(exit);
+    if (!exit.isOpen) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.blocked'),
+        incrementTurn: false
+      };
+    }
 
-    // Track exit usage
-    this.setExitUsed(exit.targetScene);
-
-    // Move to new scene
-    this.gameStateService.setCurrentScene(exit.targetScene);
     const newScene = this.sceneMechanicsService.getScene(exit.targetScene);
     if (!newScene) {
       return {
@@ -148,6 +148,15 @@ export class MovementMechanicsService extends MechanicsBaseService {
         incrementTurn: true
       };
     }
+
+    // Move to new scene
+    this.gameStateService.setCurrentScene(exit.targetScene);
+
+    // Handle scoring
+    this.handleMovementScoring(exit);
+
+    // Track exit usage
+    this.setExitUsed(exit.targetScene);
 
     return {
       success: true,
@@ -163,29 +172,72 @@ export class MovementMechanicsService extends MechanicsBaseService {
    * @returns Array of available exits
    * @throws Error if scene is invalid or exit check fails
    */
-  getAvailableExits(): SceneExit[] {
-    if (!this.lightMechanicsService.isLightPresent()) {
+  getAvailableExits(scene: Scene): SceneExit[] {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
+    if (!this.lightMechanicsService.isLightPresent(scene)) {
       return [];
     }
 
-    const scene = this.sceneMechanicsService.getCurrentScene();
     if (!scene?.exits) {
       return [];
     }
 
     return scene.exits.filter(exit => {
-      // Skip exits that require light if there's no light
-      if (exit.requiresLight && !this.lightMechanicsService.hasGlobalLight()) {
+      // Skip exits that aren't valid
+      if (this.isExit(scene, exit.direction)) {
         return false;
       }
 
-      // Check if all required flags are set
-      if (exit.requiredFlags) {
-        return this.checkFlags(exit.requiredFlags);
-      }
+      // Skip exits that require light if there's no light
+      return !(exit.requiresLight && !this.lightMechanicsService.hasGlobalLight());
 
-      return true;
+
     });
+
+  }
+
+  getExit(scene: Scene, direction: string): SceneExit | null {
+    if (!scene || scene.exits === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
+    const exit = scene.exits.find(exit =>
+      exit.direction.toLowerCase() == direction.toLowerCase()
+      || exit.description.toLowerCase() == direction.toLowerCase());
+
+    if (!exit) {
+      return null;
+    }
+
+    if (!this.isExit(scene, exit.direction)) {
+      return null;
+    }
+
+    return exit;
+  }
+
+  isExit(scene: Scene, direction: string): boolean {
+    if (!scene?.exits) {
+      return false;
+    }
+
+    const exit = scene.exits.find(exit =>
+      exit.direction.toLowerCase() == direction.toLowerCase()
+      || exit.description.toLowerCase() == direction.toLowerCase());
+
+    if (!exit) {
+      return false;
+    }
+
+    // Check if all required flags are set
+    if (exit.requiredFlags) {
+      return this.checkFlags(exit.requiredFlags);
+    }
+
+    return true;
 
   }
 
@@ -197,7 +249,7 @@ export class MovementMechanicsService extends MechanicsBaseService {
    * - May update score
    * - Sets exit scored flag
    */
-  private async handleMovementScoring(exit: SceneExit): Promise<void> {
+  private handleMovementScoring(exit: SceneExit): void {
     if (!exit.score || this.isExitScored(exit.targetScene)) {
       return;
     }

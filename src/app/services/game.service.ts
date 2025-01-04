@@ -218,7 +218,7 @@ export class GameService {
     private getKnownItems(scene: Scene): SceneObject[] {
         if (!scene.objects) return [];
 
-      return this.examinationMechanicsService.getExaminableObjects();
+      return this.examinationMechanicsService.getExaminableObjects(scene);
     }
 
     /**
@@ -270,7 +270,7 @@ export class GameService {
         }
 
         // Add movement commands from available exits
-        const exits = this.movementMechanicsService.getAvailableExits();
+        const exits = this.movementMechanicsService.getAvailableExits(scene);
         for (const exit of exits) {
             commands.push(`go ${exit.direction}`);
             // Add shorthand directions
@@ -300,7 +300,7 @@ export class GameService {
 
         const knownItems = this.getKnownItems(scene);
         const availableCommands = this.getAvailableCommands(scene);
-        const availableExits = this.movementMechanicsService.getAvailableExits();
+        const availableExits = this.movementMechanicsService.getAvailableExits(scene);
 
         return {
             commands: availableCommands.join('\n'),

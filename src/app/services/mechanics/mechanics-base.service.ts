@@ -1,5 +1,6 @@
 import {Injectable} from '@angular/core';
 import {GameStateService} from '../game-state.service';
+import {Scene, SceneObject} from '../../models';
 
 @Injectable()
 export abstract class MechanicsBaseService
@@ -158,4 +159,6 @@ export abstract class MechanicsBaseService
       this.removeFlag(flag);
     }
   }
+
+
 }

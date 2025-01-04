@@ -7,7 +7,6 @@ import {LightMechanicsService} from '../../mechanics/light-mechanics.service';
 import {InventoryMechanicsService} from '../../mechanics/inventory-mechanics.service';
 import {ContainerMechanicsService} from '../../mechanics/container-mechanics.service';
 import {ScoreMechanicsService} from '../../mechanics/score-mechanics.service';
-import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
 import {GameTextService} from '../../game-text.service';
 import {CommandResponse, GameCommand} from '../../../models';
 
@@ -29,6 +28,17 @@ import {CommandResponse, GameCommand} from '../../../models';
   providedIn: 'root'
 })
 export class LookCommandService extends BaseCommandService {
+  /**
+   * Primary verbs for command
+   */
+  readonly verbs = ['look'] as const;
+  /**
+   * Verb aliases mapping
+   */
+  protected override readonly verbAliases: { [key: string]: string } = {
+    'l': 'look'
+  };
+
   constructor(
     gameStateService: GameStateService,
     sceneMechanicsService: SceneMechanicsService,
@@ -37,7 +47,6 @@ export class LookCommandService extends BaseCommandService {
     inventoryMechanicsService: InventoryMechanicsService,
     containerMechanicsService: ContainerMechanicsService,
     scoreMechanicsService: ScoreMechanicsService,
-    private examinationMechanicsService: ExaminationMechanicsService,
     private gameTextService: GameTextService
   ) {
     super(
@@ -51,22 +60,7 @@ export class LookCommandService extends BaseCommandService {
     );
   }
 
-  canHandle(command: GameCommand): boolean {
-    return command.verb === 'look' || command.verb === 'l';
-  }
-
   handle(command: GameCommand): CommandResponse {
-
-    // Validate command format
-    if (!command.object) {
-      return {
-        success: false,
-        message: this.gameTextService.get('error.noObject', {action: command.verb}),
-        incrementTurn: false
-      };
-    }
-
-
     const scene = this.sceneMechanicsService.getCurrentScene();
     if (!scene) {
       return {
@@ -77,7 +71,7 @@ export class LookCommandService extends BaseCommandService {
     }
 
     // Check light
-    if (!this.lightMechanicsService.isLightPresent()) {
+    if (!this.lightMechanicsService.isLightPresent(scene)) {
       return {
         success: false,
         message: this.gameTextService.get('error.tooDark', {action: command.verb}),
@@ -85,49 +79,14 @@ export class LookCommandService extends BaseCommandService {
       };
     }
 
-    // If no object specified, describe the current scene
-    if (!command.object) {
+    const description = this.sceneMechanicsService.getSceneDescription(scene);
 
-      const description = this.sceneMechanicsService.getSceneDescription(scene);
-
-      return {
-        success: true,
-        message: description,
-        incrementTurn: true
-      };
-    }
-
-    // Find and validate object
-    const object = this.sceneMechanicsService.findObject(command.object);
-    if (!object) {
-      return {
-        success: false,
-        message: this.gameTextService.get('error.objectNotFound', {item: command.object}),
-        incrementTurn: false
-      };
-    }
-
-    // Check if we can examine the object
-    const canExamine = this.examinationMechanicsService.canExamine(object);
-    if (!canExamine.success) {
-      return canExamine;
-    }
-
-    // Get the object description
-    const description = this.examinationMechanicsService.getObjectDescription(object, false);
     return {
       success: true,
       message: description,
       incrementTurn: true
     };
+
   }
 
-  override getSuggestions(command: GameCommand): string[] {
-    if (!command.verb || !['look', 'l'].includes(command.verb)) {
-      return [];
-    }
-
-    const examinableObjects = this.examinationMechanicsService.getExaminableObjects();
-    return examinableObjects.map(obj => `${command.verb} ${obj}`);
-  }
 }

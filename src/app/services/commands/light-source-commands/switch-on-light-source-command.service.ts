@@ -7,59 +7,42 @@ import {ProgressMechanicsService} from '../../mechanics/progress-mechanics.servi
 import {BaseCommandService} from '../base-command.service';
 import {ContainerMechanicsService} from '../../mechanics/container-mechanics.service';
 import {ScoreMechanicsService} from '../../mechanics/score-mechanics.service';
-import {CommandResponse, GameCommand, SceneObject} from '../../../models';
-import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
+import {CommandResponse, GameCommand} from '../../../models';
 import {GameTextService} from '../../game-text.service';
+import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
 
 /**
- * Command service for handling read commands.
- * Orchestrates reading interactions with objects in the game.
- *
- * Key Responsibilities:
- * - Validate read command targets
- * - Coordinate between mechanics services
- * - Handle read command suggestions
+ * Command service for handling light source control commands.
+ * Orchestrates between mechanics services to handle turning light sources on/off.
  *
  * State Dependencies (via FlagMechanicsService):
+ * - Light source state flags
+ * - Interaction flags
  * - Object visibility flags
- * - Light state flags
- * - Read interaction flags
  *
  * Service Dependencies:
- * - SceneMechanicsService: Scene and object access
- * - LightMechanicsService: Visibility checks
- * - InventoryMechanicsService: Inventory object access
- * - FlagMechanicsService: State management
- * - ExaminationMechanicsService: Reading/examination handling
- * - GameTextService: Error messages
+ * - LightMechanicsService: Light source state and validation
+ * - InventoryMechanicsService: Light source possession
+ * - SceneMechanicsService: Object visibility and location
+ * - FlagMechanicsService: State tracking
  *
  * Command Format:
- * - "read [object]"
- * - Handles reading text from objects with read interactions
- *
- * Error Handling:
- * - Validates object existence
- * - Checks visibility conditions
- * - Verifies read interactions
- * - Provides specific error messages
- *
- * State Management:
- * - All state queries through FlagMechanicsService
- * - Maintains consistency on errors
+ * - "turn [light source] on/off"
+ * - Requires object and preposition (on/off)
  */
 @Injectable({
   providedIn: 'root'
 })
-export class ReadObjectCommandService extends BaseCommandService {
+export class SwitchOnLightSourceCommandService extends BaseCommandService {
   /**
    * Primary verbs for command
    */
-  readonly verbs = ['read'] as const;
+  readonly verbs = ['switch'] as const;
   /**
    * Verb aliases mapping
    */
   protected override readonly verbAliases: { [key: string]: string } = {
-    'r': 'read'
+    's': 'switch'
   };
 
   constructor(
@@ -84,22 +67,31 @@ export class ReadObjectCommandService extends BaseCommandService {
     );
   }
 
+  override canHandle(command: GameCommand): boolean {
+    // First check if the verb is valid using base class logic
+    if (!super.canHandle(command)) {
+      return false;
+    }
+
+    return command.preposition === 'on' && !!command.object && !!command.target;
+  }
+
   /**
-   * Handles the read command execution
+   * Handles the turn command execution
    * @param command Command to execute
    * @returns Response indicating success/failure and appropriate message
    *
-   * State Dependencies (all read-only):
+   * State Dependencies:
+   * - Light source state via LightMechanicsService
+   * - Scene state via SceneMechanicsService
    * - Object visibility via LightMechanicsService
-   * - Object state via FlagMechanicsService
    *
-   * Error Conditions:
-   * - No object specified
+   * Error Cases:
+   * - Missing object
+   * - Invalid preposition (not on/off)
    * - Object not found
-   * - Object not readable
    * - Object not visible
-   *
-   * @throws None - Errors are returned in CommandResponse
+   * - Object not a light source
    */
   override handle(command: GameCommand): CommandResponse {
     // Validate command format
@@ -142,24 +134,24 @@ export class ReadObjectCommandService extends BaseCommandService {
       };
     }
 
-    // First check if object can be examined at all
-    const canRead = this.examinationMechanicsService.canExamine(scene, object);
-    if (!canRead.success) {
-      return canRead;
+    // Check visibility
+    if (!this.lightMechanicsService.isObjectVisible(object)) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.tooDark', {action: 'turn'}),
+        incrementTurn: false
+      };
     }
 
-    // Handle scoring
-    this.scoreMechanicsService.handleObjectScoring({
-      action: command.verb,
-      object,
-      skipGeneralRules: false
-    });
+    const lightResult = this.lightMechanicsService.switchLightSourceOnOff(scene, object, true);
+    if (!lightResult.success) {
+      return lightResult;
+    }
 
-    // Return the read interaction message
     return {
-      success: true,
-      message: canRead.message,
-      incrementTurn: true
+      success: lightResult.success,
+      message: lightResult.message || '',
+      incrementTurn: lightResult.success
     };
   }
 
@@ -168,19 +160,21 @@ export class ReadObjectCommandService extends BaseCommandService {
    * @param command Partial command to get suggestions for
    * @returns Array of suggested command completions
    *
-   * State Dependencies (all read-only):
+   * State Dependencies:
    * - Scene state via SceneMechanicsService
-   * - Inventory state via InventoryMechanicsService
-   * - Visibility state via LightMechanicsService
+   * - Light state via LightMechanicsService
    *
-   * Suggestion Rules:
-   * - Only suggests visible objects
-   * - Only suggests objects with read interactions
-   * - Includes inventory items
-   * - Includes scene objects
+   * Suggestion Types:
+   * 1. No verb: Suggest primary verb ('switch')
+   * 2. Partial verb: Suggest matching verbs
+   * 3. Full verb, no object: Suggest visible light sources
+   * 4. Full verb and object: Suggest prepositions (on)
+   * 5. Full command: No suggestions
+   *
+   * @throws None - Returns empty array on error
    */
   override getSuggestions(command: GameCommand): string[] {
-    // Use base class for verb suggestions if no verb or partial verb
+// Use base class for verb suggestions if no verb or partial verb
     if (!command.verb || !this.canHandle(command)) {
       return this.getVerbSuggestions(command.verb);
     }
@@ -191,22 +185,27 @@ export class ReadObjectCommandService extends BaseCommandService {
       return [];
     }
 
-    const allItems = this.getAllKnownObjects(scene);
-
-    // Filter out only the objects we can read
-    const readableItems = allItems.filter(item => this.examinationMechanicsService.canRead(scene, item));
-
     const verb = this.getPrimaryVerb(command.verb);
 
-    // If we have a partial object, filter the suggestions
-    if (command.object) {
-      const partialObject = command.object.toLowerCase();
-      return readableItems
-        .filter(obj => obj.name.toLowerCase().startsWith(partialObject))
+    // If we have a verb but no object, suggest visible light sources
+    if (!command.object) {
+      const lightSources = this.getAllKnownObjects(scene)
+        .filter(obj => this.lightMechanicsService.isLightSource(obj));
+
+      return lightSources
         .map(obj => `${verb} ${obj.name}`);
     }
 
-    // Return all possible objects if no partial object specified
-    return readableItems.map(obj => `${verb} ${obj.name}`);
+    // If we have an object but no preposition, suggest on/off
+    if (!command.preposition) {
+      const object = this.sceneMechanicsService.findObjectByName(scene, command.object);
+      if (object &&
+        this.lightMechanicsService.isLightSource(object) &&
+        this.lightMechanicsService.isObjectVisible(object)) {
+        return [`${verb} ${command.object} on`];
+      }
+    }
+
+    return [];
   }
 }

@@ -4,7 +4,7 @@ import {LightMechanicsService} from './light-mechanics.service';
 import {ContainerMechanicsService} from './container-mechanics.service';
 import {ScoreMechanicsService} from './score-mechanics.service';
 import {GameTextService} from '../game-text.service';
-import {CommandResponse, SceneObject} from '../../models';
+import {CommandResponse, Scene, SceneObject} from '../../models';
 import {MechanicsBaseService} from './mechanics-base.service';
 import {GameStateService} from '../game-state.service';
 
@@ -59,6 +59,7 @@ export class ExaminationMechanicsService extends MechanicsBaseService {
 
   /**
    * Get the description for an object based on its state and type
+   * @param scene
    * @param object Object to get description for
    * @param detailed Whether to use detailed (examine) description
    * @returns Description text with any applicable container contents
@@ -71,9 +72,17 @@ export class ExaminationMechanicsService extends MechanicsBaseService {
    * - Object not visible
    * - No light present
    */
-  getObjectDescription(object: SceneObject, detailed: boolean = false): string {
+  getObjectDescription(scene: Scene, object: SceneObject, detailed: boolean = false): string {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene');
+    }
+
+    if (!object) {
+      throw new Error('Invalid object');
+    }
+
     // Validate visibility
-    const canExamine = this.canExamine(object);
+    const canExamine = this.canExamine(scene, object);
     if (!canExamine.success) {
       return this.gameText.get('error.cannotExamine', {item: object.name});
     }
@@ -82,8 +91,7 @@ export class ExaminationMechanicsService extends MechanicsBaseService {
     const description = this.getBaseDescription(object, detailed);
 
     // Add container contents if applicable
-    const containerDesc = object.isContainer ?
-      this.containerMechanics.getContainerContents(object) : '';
+    const containerDesc = this.containerMechanics.getContainerContents(scene, object);
 
     // Handle scoring
     this.handleExaminationScoring(object, detailed);
@@ -99,22 +107,20 @@ export class ExaminationMechanicsService extends MechanicsBaseService {
    * - Light state
    * - Container open states
    */
-  getExaminableObjects(): SceneObject[] {
-    // Check light first
-    if (!this.lightMechanics.isLightPresent()) {
-      return [];
+  getExaminableObjects(scene: Scene): SceneObject[] {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
     }
 
-    const scene = this.sceneService.getCurrentScene();
-    if (!scene?.objects) {
+    // Check light first
+    if (!this.lightMechanics.isLightPresent(scene)) {
       return [];
     }
 
     const suggestions = new Set<SceneObject>();
 
     for (const obj of Object.values(scene.objects)) {
-      console.log('Examining object:', obj);
-      const canExamineResult = this.canExamine(obj);
+      const canExamineResult = this.canExamine(scene, obj);
       if (!canExamineResult.success) {
         continue;
       }
@@ -122,13 +128,13 @@ export class ExaminationMechanicsService extends MechanicsBaseService {
       suggestions.add(obj);
     }
 
-    console.log('Examinable objects:', suggestions);
-
     return Array.from(suggestions);
   }
 
+
   /**
-   * Check if an object can be examined
+   * Check if an object can be read
+   * @param scene
    * @param object Object to check
    * @returns CommandResponse indicating if examination is possible
    *
@@ -136,8 +142,16 @@ export class ExaminationMechanicsService extends MechanicsBaseService {
    * - Light state
    * - Object visibility
    */
-  canExamine(object: SceneObject): CommandResponse {
-    if (!this.lightMechanics.isLightPresent()) {
+  canRead(scene: Scene, object: SceneObject): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene');
+    }
+
+    if (!object) {
+      throw new Error('Invalid object');
+    }
+
+    if (!this.lightMechanics.isLightPresent(scene)) {
       return {
         success: false,
         message: this.gameText.get('error.tooDark', {action: 'examine'}),
@@ -154,7 +168,70 @@ export class ExaminationMechanicsService extends MechanicsBaseService {
     }
 
     // Check if in closed container
-    const container = this.containerMechanics.findContainerWithItem(object.id);
+    const container = this.containerMechanics.findContainerWithItem(scene, object.id);
+    if (container && !this.containerMechanics.isOpen(container.id)) {
+      return {
+        success: false,
+        message: this.gameText.get('error.closedContainer', {item: object.name}),
+        incrementTurn: false
+      };
+    }
+
+    // Then check if it has a read interaction
+    if (!object.interactions?.['read']) {
+      return {
+        success: false,
+        message: this.gameText.get('error.cantRead', {item: object.name}),
+        incrementTurn: false
+      };
+    }
+
+    return {
+      success: true,
+      message: object.interactions['read'].message,
+      incrementTurn: false
+    };
+
+  }
+
+
+  /**
+   * Check if an object can be examined
+   * @param scene
+   * @param object Object to check
+   * @returns CommandResponse indicating if examination is possible
+   *
+   * State Dependencies:
+   * - Light state
+   * - Object visibility
+   */
+  canExamine(scene: Scene, object: SceneObject): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene');
+    }
+
+    if (!object) {
+      throw new Error('Invalid object');
+    }
+
+    if (!this.lightMechanics.isLightPresent(scene)) {
+      return {
+        success: false,
+        message: this.gameText.get('error.tooDark', {action: 'examine'}),
+        incrementTurn: false
+      };
+    }
+
+    if (!this.lightMechanics.isObjectVisible(object)) {
+      return {
+        success: false,
+        message: this.gameText.get('error.objectNotVisible', {item: object.name}),
+        incrementTurn: false
+      };
+    }
+
+    // Check if in closed container
+    const container = this.containerMechanics.findContainerWithItem(scene, object.id);
     if (container && !this.containerMechanics.isOpen(container.id)) {
       return {
         success: false,

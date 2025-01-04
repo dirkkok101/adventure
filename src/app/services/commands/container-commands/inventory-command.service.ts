@@ -69,15 +69,15 @@ export class InventoryCommandService extends BaseCommandService {
   }
 
   /**
-   * Checks if this service can handle the given command
-   *
-   * @param command - Command to check
-   * @returns True if command is an inventory command
+   * Primary verbs for command
    */
-  override canHandle(command: GameCommand): boolean {
-    return command.verb === 'inventory' || command.verb === 'i' || command.verb === 'inv';
-  }
-
+  readonly verbs = ['inventory'] as const;
+  /**
+   * Verb aliases mapping
+   */
+  protected override readonly verbAliases: { [key: string]: string } = {
+    'i': 'inventory'
+  };
   /**
    * Handles inventory command execution
    *
@@ -96,17 +96,26 @@ export class InventoryCommandService extends BaseCommandService {
    * @returns Response with inventory contents
    */
   override handle(command: GameCommand): CommandResponse {
-    if (!command.object) {
+    const scene = this.sceneMechanicsService.getCurrentScene();
+    if (!scene) {
       return {
         success: false,
-        message: this.gameTextService.get('error.noObject', {action: command.verb}),
+        message: this.gameTextService.get('error.noScene', {action: command.verb}),
         incrementTurn: false
       };
     }
 
+    // Check light
+    if (!this.lightMechanicsService.isLightPresent(scene)) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.tooDark', {action: command.verb}),
+        incrementTurn: false
+      };
+    }
 
     // Get inventory items
-    const items = this.inventoryMechanicsService.listInventory();
+    const items = this.inventoryMechanicsService.listInventory(scene);
 
     // No items case
     if (items.length === 0) {
@@ -119,15 +128,9 @@ export class InventoryCommandService extends BaseCommandService {
 
     // Get descriptions for each item
     const itemDescriptions =
-      items.map(itemId => {
-          // Get the object from the scene service first
-          const item = this.sceneMechanicsService.findObjectById(itemId);
-          if (!item) {
-            return this.gameTextService.get('error.itemNotFound', {item: itemId});
-          }
-
+      items.map(item => {
           // Get description using the full object
-          const description = this.examinationMechanicsService.getObjectDescription(item, false);
+          const description = this.examinationMechanicsService.getObjectDescription(scene, item, false);
           return `${item.name}: ${description}`;
         }
       );
@@ -135,10 +138,8 @@ export class InventoryCommandService extends BaseCommandService {
     // Get weight information if enabled
     let weightInfo = '';
 
-    const scene = this.sceneMechanicsService.getCurrentScene();
-    const contents = this.inventoryMechanicsService.listInventory();
-    const totalWeight = contents.reduce((total, id) =>
-      total + (scene?.objects?.[id]?.weight || 0), 0);
+    const totalWeight = items.reduce((total, item) =>
+      total + (item?.weight ?? 0), 0);
 
     if (totalWeight > 0) {
       weightInfo = this.gameTextService.get('inventory.weight', {
@@ -146,7 +147,6 @@ export class InventoryCommandService extends BaseCommandService {
         max: this.inventoryMechanicsService.getMaxInventoryWeight()
       });
     }
-
 
     return {
       success: true,
@@ -159,21 +159,4 @@ export class InventoryCommandService extends BaseCommandService {
 
   }
 
-  /**
-   * Gets command suggestions for inventory command
-   *
-   * Suggestion Logic:
-   * - Only provides suggestions when no verb is entered
-   * - Suggests all valid inventory command variations
-   *
-   * @param command - Partial command to get suggestions for
-   * @returns Array of suggested command completions
-   */
-  override getSuggestions(command: GameCommand): string[] {
-    // Only suggest inventory-related verbs when no verb is entered
-    if (!command.verb) {
-      return ['inventory', 'i', 'inv'];
-    }
-    return [];
-  }
 }

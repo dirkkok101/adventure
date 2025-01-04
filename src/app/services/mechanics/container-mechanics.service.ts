@@ -1,5 +1,5 @@
 import {Injectable} from '@angular/core';
-import {CommandResponse, SceneObject} from '../../models';
+import {CommandResponse, Scene, SceneObject} from '../../models';
 import {SceneMechanicsService} from './scene-mechanics.service';
 import {GameTextService} from '../game-text.service';
 import {GameStateService} from '../game-state.service';
@@ -63,13 +63,28 @@ export class ContainerMechanicsService extends MechanicsBaseService {
   /**
    * Add an item to a container
    * Updates game state to track the new container contents
-   * @param containerId ID of the container to add to
+   *
+   * @param scene The current scene containing the container and item
+   * @param container
    * @param itemId ID of the item to add
    * @returns CommandResponse indicating success/failure
+   *
+   * State Dependencies:
+   * - Container state (open/closed, locked/unlocked)
+   * - Container contents
+   *
+   * Error Conditions:
+   * - Invalid scene or container
+   * - Container is locked
+   * - Container is closed
+   * - Container is at capacity
    */
-  addToContainer(containerId: string, itemId: string): CommandResponse {
-    const container = this.getValidContainer(containerId);
-    if (!container) {
+  addToContainer(scene: Scene, container: SceneObject, itemId: string): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
+    if (!container || !container.isContainer) {
       return {
         success: false,
         message: this.gameTextService.get('error.invalidContainer'),
@@ -77,7 +92,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
-    if (!this.isLocked(containerId)) {
+    if (!this.isLocked(container.id)) {
       return {
         success: false,
         message: this.gameTextService.get('error.containerLocked', {container: container.name}),
@@ -85,7 +100,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
-    if (!this.isOpen(containerId)) {
+    if (!this.isOpen(container.id)) {
       return {
         success: false,
         message: this.gameTextService.get('error.containerClosed', {container: container.name}),
@@ -93,8 +108,8 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
-    const contents = this.getContents(containerId);
-    if (container.capacity && contents.length >= container.capacity) {
+    const contentIDs = this.getContainerContentIDs(container.id);
+    if (container.capacity && contentIDs.length >= container.capacity) {
       return {
         success: false,
         message: this.gameTextService.get('error.containerFull', {container: container.name}),
@@ -102,7 +117,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
-    this.setContents(containerId, [...contents, itemId]);
+    this.setContents(container.id, [...contentIDs, itemId]);
 
     return {
       success: true,
@@ -115,14 +130,29 @@ export class ContainerMechanicsService extends MechanicsBaseService {
 
   /**
    * Remove an item from a container
-   * Updates game state to reflect the removal
-   * @param containerId ID of the container to remove from
+   * Updates game state to track the new container contents
+   *
+   * @param scene The current scene containing the container and item
+   * @param container
    * @param itemId ID of the item to remove
    * @returns CommandResponse indicating success/failure
+   *
+   * State Dependencies:
+   * - Container state (open/closed, locked/unlocked)
+   * - Container contents
+   *
+   * Error Conditions:
+   * - Invalid scene or container
+   * - Container is locked
+   * - Container is closed
+   * - Container is at capacity
    */
-  removeFromContainer(containerId: string, itemId: string): CommandResponse {
-    const container = this.getValidContainer(containerId);
-    if (!container) {
+  removeFromContainer(scene: Scene, container: SceneObject, itemId: string): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
+    if (!container || !container.isContainer) {
       return {
         success: false,
         message: this.gameTextService.get('error.invalidContainer'),
@@ -130,7 +160,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
-    if (!this.isLocked(containerId)) {
+    if (!this.isLocked(container.id)) {
       return {
         success: false,
         message: this.gameTextService.get('error.containerLocked', {container: container.name}),
@@ -138,7 +168,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
-    if (!this.isOpen(containerId)) {
+    if (!this.isOpen(container.id)) {
       return {
         success: false,
         message: this.gameTextService.get('error.containerClosed', {container: container.name}),
@@ -146,18 +176,19 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
-    const contents = this.getContents(containerId);
-    if (!contents.includes(itemId)) {
+    const contentIDs = this.getContainerContentIDs(container.id);
+    if (!contentIDs.includes(itemId)) {
       return {
         success: false,
         message: this.gameTextService.get('error.itemNotInContainer', {
+          item: itemId,
           container: container.name
         }),
         incrementTurn: false
       };
     }
 
-    this.setContents(containerId, contents.filter(id => id !== itemId));
+    this.setContents(container.id, contentIDs.filter(id => id !== itemId));
 
     return {
       success: true,
@@ -170,14 +201,15 @@ export class ContainerMechanicsService extends MechanicsBaseService {
 
   /**
    * Find which container holds a specific item
+   * @param scene
    * @param objectId The ID of the item to check
    * @returns The container object or null if not in a container
    */
-  findContainerWithItem(objectId: string): SceneObject | null {
-    const containers = this.getSceneContainers();
+  findContainerWithItem(scene: Scene, objectId: string): SceneObject | null {
+    const containers = this.getSceneContainers(scene);
 
-    for (const [containerId, container] of containers) {
-      if (this.getContents(containerId).includes(objectId)) {
+    for (const container of containers) {
+      if (this.getContainerContentIDs(container.id).includes(objectId)) {
         return container;
       }
     }
@@ -186,61 +218,35 @@ export class ContainerMechanicsService extends MechanicsBaseService {
   }
 
   /**
-   * Check if an item is currently in any container
-   * @param objectId ID of the item to check
-   * @returns True if the item is in a container, false otherwise
+   * Get a list of SceneObject in a container
+   * @param scene
+   * @param container Container to retrieve contents for
+   * @returns An array of objects in the container
    */
-  isInContainer(objectId: string): boolean {
-    return this.findContainerWithItem(objectId) !== null;
-  }
+  getContainerContents(scene: Scene, container: SceneObject): SceneObject[] {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
 
-  /**
-   * Get the container that holds a specific item
-   * @param objectId ID of the item to check
-   * @returns ID of the container holding the item, or null if not in any container
-   */
-  getContainerFor(objectId: string): string | null {
-    const container = this.findContainerWithItem(objectId);
-    return container ? container.id : null;
-  }
-
-  /**
-   * Get a description of a container's contents
-   * @param container Container to describe
-   * @returns Description of container contents
-   */
-  getContainerContents(container: SceneObject): string {
     if (!container.isContainer) {
-      return '';
+      return [];
     }
 
-    const contents = this.getContents(container.id);
-    if (!contents.length) {
-      return container.descriptions.empty || this.gameTextService.get('container.empty');
-    }
-
-    const scene = this.sceneMechanicsService.getCurrentScene();
-    if (!scene?.objects) {
-      return this.gameTextService.get('error.sceneNotFound');
+    const contentIDs = this.getContainerContentIDs(container.id);
+    if (!contentIDs.length) {
+      return [];
     }
 
     // Build list of visible contents with type safety
-    const visibleContents: string[] = [];
-    for (const id of contents) {
+    const containerObjects: SceneObject[] = [];
+    for (const id of contentIDs) {
       const obj = scene.objects[id];
       if (obj) {
-        visibleContents.push(obj.name);
+        containerObjects.push(obj);
       }
     }
 
-    if (!visibleContents.length) {
-      return container.descriptions.empty || this.gameTextService.get('container.empty');
-    }
-
-    const contentList = visibleContents.join(', ');
-    return container.descriptions.contents ?
-      container.descriptions.contents.replace('{items}', contentList) :
-      this.gameTextService.get('container.contents', {items: contentList});
+    return containerObjects;
   }
 
   /**
@@ -255,20 +261,24 @@ export class ContainerMechanicsService extends MechanicsBaseService {
    * - Container is locked
    * - Container is already open
    *
-   * @param containerId ID of container to open
+   * @param scene
+   * @param container
    * @returns CommandResponse indicating success/failure
    */
-  openContainer(containerId: string): CommandResponse {
-    const container = this.getValidContainer(containerId);
-    if (!container) {
+  openContainer(scene: Scene, container: SceneObject): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
+    if (!container || !container.isContainer) {
       return {
         success: false,
-        message: this.gameTextService.get('error.invalidContainer', {container: containerId}),
+        message: this.gameTextService.get('error.invalidContainer'),
         incrementTurn: false
       };
     }
 
-    if (this.isLocked(containerId)) {
+    if (this.isLocked(container.id)) {
       return {
         success: false,
         message: this.gameTextService.get('container.locked', {container: container.name}),
@@ -276,7 +286,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
-    if (this.isOpen(containerId)) {
+    if (this.isOpen(container.id)) {
       return {
         success: false,
         message: this.gameTextService.get('container.alreadyOpen', {container: container.name}),
@@ -284,9 +294,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
-    this.setContainerOpen(containerId, true);
-
-    this.getContainerContents(container);
+    this.setContainerOpen(container.id, true);
 
     return {
       success: true,
@@ -306,20 +314,24 @@ export class ContainerMechanicsService extends MechanicsBaseService {
    * - Container does not exist
    * - Container is already closed
    *
-   * @param containerId ID of container to close
+   * @param scene
+   * @param container
    * @returns CommandResponse indicating success/failure
    */
-  closeContainer(containerId: string): CommandResponse {
-    const container = this.getValidContainer(containerId);
-    if (!container) {
+  closeContainer(scene: Scene, container: SceneObject): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
+    if (!container || !container.isContainer) {
       return {
         success: false,
-        message: this.gameTextService.get('error.invalidContainer', {container: containerId}),
+        message: this.gameTextService.get('error.invalidContainer'),
         incrementTurn: false
       };
     }
 
-    if (!this.isOpen(containerId)) {
+    if (!this.isOpen(container.id)) {
       return {
         success: false,
         message: this.gameTextService.get('container.alreadyClosed', {container: container.name}),
@@ -327,7 +339,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
       };
     }
 
-    this.setContainerOpen(containerId, false);
+    this.setContainerOpen(container.id, false);
 
     return {
       success: true,
@@ -338,11 +350,11 @@ export class ContainerMechanicsService extends MechanicsBaseService {
 
   /**
    * Check if a container exists and is valid
-   * @param containerId ID of container to validate
-   * @returns The container object if valid, null otherwise
+   * @param scene the scene to search
+   * @param containerId ID of container to retrieve
+   * @returns The container object if it exists and is a container, null otherwise
    */
-  private getValidContainer(containerId: string): SceneObject | null {
-    const scene = this.sceneMechanicsService.getCurrentScene();
+  getContainer(scene: Scene, containerId: string): SceneObject | null {
     const container = scene?.objects?.[containerId];
     if (!container) return null;
 
@@ -353,15 +365,14 @@ export class ContainerMechanicsService extends MechanicsBaseService {
    * Get all containers in the current scene
    * @returns Map of container ID to container object
    */
-  public getSceneContainers(): Map<string, SceneObject> {
-    const scene = this.sceneMechanicsService.getCurrentScene();
-    const containers = new Map<string, SceneObject>();
+  public getSceneContainers(scene:Scene): SceneObject[] {
+    const containers: SceneObject[] = [];
 
     if (!scene?.objects) return containers;
 
     for (const [id, obj] of Object.entries(scene.objects)) {
       if (obj.isContainer) {
-        containers.set(id, obj);
+        containers.push(obj);
       }
     }
 
@@ -373,7 +384,7 @@ export class ContainerMechanicsService extends MechanicsBaseService {
    * @param containerId ID of container to check
    * @returns Array of item IDs in the container
    */
-  private getContents(containerId: string): string[] {
+  private getContainerContentIDs(containerId: string): string[] {
     return this.getObjectData<string[]>(containerId, 'contents') || [];
   }
 

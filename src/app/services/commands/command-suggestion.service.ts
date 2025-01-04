@@ -39,7 +39,7 @@ export class CommandSuggestionService {
      */
     getContainerSuggestions(command: GameCommand): string[] {
         const scene = this.sceneService.getCurrentScene();
-        if (!scene?.objects || !this.lightMechanics.isLightPresent()) {
+        if (!scene?.objects || !this.lightMechanics.isLightPresent(scene)) {
             return [];
         }
 

@@ -12,10 +12,10 @@ import {GameTextService} from '../../game-text.service';
 import {MovementMechanicsService} from '../../mechanics/movement-mechanics.service';
 
 /**
- * Service responsible for handling commands related to opening and closing exits (doors, gates, etc.) in scenes.
+ * Service responsible for handling commands related to opening exits (doors, gates, etc.) in scenes.
  *
  * State Dependencies (via FlagMechanicsService):
- * - Exit open/closed states ([direction]_open)
+ * - Exit open states ([direction]_open)
  * - Exit locked states ([direction]_locked)
  * - Exit openable states ([direction]_openable)
  * - Scene visibility and light conditions
@@ -32,7 +32,18 @@ import {MovementMechanicsService} from '../../mechanics/movement-mechanics.servi
 @Injectable({
   providedIn: 'root'
 })
-export class OpenCloseExitCommandService extends BaseCommandService {
+export class OpenExitCommandService extends BaseCommandService {
+  /**
+   * Primary verbs for command
+   */
+  readonly verbs = ['open'] as const;
+  /**
+   * Verb aliases mapping
+   */
+  protected override readonly verbAliases: { [key: string]: string } = {
+    'o': 'open'
+  };
+
   constructor(
     gameStateService: GameStateService,
     sceneMechanicsService: SceneMechanicsService,
@@ -56,80 +67,53 @@ export class OpenCloseExitCommandService extends BaseCommandService {
   }
 
   /**
-   * Determines if this service can handle the given command
-   * @param command The command to check
-   * @returns True if the command is an open/close command
-   */
-  canHandle(command: GameCommand): boolean {
-    return command.verb === 'open' || command.verb === 'close';
-  }
-
-  /**
-   * Handles open/close commands for exits by orchestrating between services
+   * Handles open commands for exits by orchestrating between services
    *
    * State Effects:
-   * - Updates exit open/closed state through FlagMechanicsService
-   * - Updates score if action is successful
-   * - Increments turn counter on success
+   * - Updates exit open state
    *
    * Error Conditions:
-   * - Returns error if no object specified
    * - Returns error if scene is too dark
    * - Returns error if exit not found
    * - Returns error if exit cannot be operated
    * - Returns error if exit is locked
    * - Returns error if exit is not openable
-   * - Returns error if exit requires light but scene is dark
    *
    * @param command The command to handle
    * @returns Command response with success/failure and message
    */
   handle(command: GameCommand): CommandResponse {
+    // Validate command format
     if (!command.object) {
       return {
         success: false,
-        message: this.gameTextService.get('error.noObject', {action: command.verb}),
+        message: this.gameTextService.get('error.noObject', {
+          action: this.getPrimaryVerb(command.verb)
+        }),
         incrementTurn: false
       };
     }
 
-    // Check if there's enough light to interact
-    if (!this.lightMechanicsService.isLightPresent()) {
-      return {
-        success: false,
-        message: this.gameTextService.get('error.tooDark'),
-        incrementTurn: false
-      };
-    }
-
-    // Find and validate object
-    const object = this.sceneMechanicsService.findObject(command.object);
-    if (!object) {
-      return {
-        success: false,
-        message: this.gameTextService.get('error.objectNotFound', {object: command.object}),
-        incrementTurn: false
-      };
-    }
-
-    // Get the current scene and available exits
+    // Get current scene
     const scene = this.sceneMechanicsService.getCurrentScene();
     if (!scene) {
       return {
         success: false,
-        message: this.gameTextService.get('error.noScene', {action: command.verb}),
+        message: this.gameTextService.get('error.noScene'),
         incrementTurn: false
       };
     }
 
-    // Get available exits (this filters based on light and required flags)
-    const availableExits = this.movementMechanicsService.getAvailableExits();
+    // Check light
+    if (!this.lightMechanicsService.isLightPresent(scene)) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.tooDark', {action: command.verb}),
+        incrementTurn: false
+      };
+    }
 
-    // Try to find the exit among available exits
-    const exit = availableExits.find(e =>
-      e.direction.toLowerCase() === command.object?.toLowerCase() ||
-      e.description.toLowerCase().includes(command.object?.toLowerCase() || '')
-    );
+    const exit = this.movementMechanicsService.getExit(scene, command.object);
 
     if (!exit) {
       return {
@@ -139,17 +123,8 @@ export class OpenCloseExitCommandService extends BaseCommandService {
       };
     }
 
-    // Check if exit requires light specifically
-    if (exit.requiresLight) {
-      return {
-        success: false,
-        message: this.gameTextService.get('movement.exitNotVisible', {exit: exit.direction}),
-        incrementTurn: false
-      };
-    }
-
     // Check if exit is openable
-    if (!exit.isOpenable || !this.movementMechanicsService.isExitOpenable(exit.direction)) {
+    if (!this.movementMechanicsService.isExitOpenable(exit.direction)) {
       return {
         success: false,
         message: this.gameTextService.get('movement.exitNotOpenable', {exit: exit.direction, action: command.verb}),
@@ -166,30 +141,22 @@ export class OpenCloseExitCommandService extends BaseCommandService {
       };
     }
 
-    const isOpening = command.verb === 'open';
     const currentlyOpen = this.movementMechanicsService.isExitOpen(exit.direction);
 
     // Check if already in desired state
-    if (isOpening === currentlyOpen) {
+    if (currentlyOpen) {
       return {
         success: false,
         message: this.gameTextService.get('movement.exitAlreadyInState', {
           exit: exit.direction,
-          action: isOpening ? 'open' : 'closed'
+          action: command.verb
         }),
         incrementTurn: false
       };
     }
 
     // Update exit state
-    this.movementMechanicsService.setExitOpen(exit.direction, isOpening);
-
-    // Handle scoring
-    this.scoreMechanicsService.handleObjectScoring({
-      action: command.verb,
-      object,
-      skipGeneralRules: false
-    });
+    this.movementMechanicsService.setExitOpen(exit.direction, true);
 
     return {
       success: true,
@@ -198,23 +165,31 @@ export class OpenCloseExitCommandService extends BaseCommandService {
     };
   }
 
-  /**
-   * Get suggestions for openable/closeable exits
-   * Only returns suggestions if there is sufficient light
-   *
-   * @param command Command to get suggestions for
-   * @returns Array of openable/closeable exit names
-   */
   override getSuggestions(command: GameCommand): string[] {
-    // Only provide suggestions if we have light and no object specified
-    if (!command.verb || command.object || !this.lightMechanicsService.isLightPresent()) {
+  // Use base class for verb suggestions if no verb or partial verb
+    if (!command.verb || !this.canHandle(command)) {
+      return this.getVerbSuggestions(command.verb);
+    }
+
+    // Get current scene and check light
+    const scene = this.sceneMechanicsService.getCurrentScene();
+    if (!scene || !this.lightMechanicsService.isLightPresent(scene)) {
       return [];
     }
 
-    // Get available exits and filter for openable ones
-    const availableExits = this.movementMechanicsService.getAvailableExits();
-    return availableExits
-      .filter(exit => exit.isOpenable)
-      .map(exit => exit.direction);
+    const exits = this.movementMechanicsService.getAvailableExits(scene);
+
+    const verb = this.getPrimaryVerb(command.verb);
+
+    // If we have a partial object, filter the suggestions
+    if (command.object) {
+      const partialObject = command.object.toLowerCase();
+      return exits
+        .filter(obj => obj.direction.toLowerCase().startsWith(partialObject))
+        .map(obj => `${verb} ${obj.direction}`);
+    }
+
+    // Return all possible objects if no partial object specified
+    return exits.map(obj => `${verb} ${obj.direction}`);
   }
 }

@@ -4,7 +4,7 @@ import {SceneMechanicsService} from "./scene-mechanics.service";
 import {ScoreMechanicsService} from "./score-mechanics.service";
 import {MechanicsBaseService} from './mechanics-base.service';
 import {GameStateService} from '../game-state.service';
-import {CommandResponse} from '../../models';
+import {CommandResponse, Scene, SceneObject} from '../../models';
 import {GameTextService} from '../game-text.service';
 
 /**
@@ -58,8 +58,6 @@ export class InventoryMechanicsService extends MechanicsBaseService {
   private readonly MAX_INVENTORY_WEIGHT = 20; // Default max weight if not specified
 
   constructor(
-    private sceneMechanics: SceneMechanicsService,
-    private containerMechanics: ContainerMechanicsService,
     private scoreMechanics: ScoreMechanicsService,
     private gameTextService: GameTextService,
     gameStateService: GameStateService
@@ -80,41 +78,41 @@ export class InventoryMechanicsService extends MechanicsBaseService {
    * @returns Total weight of inventory items
    * @private
    */
-  getCurrentWeight(): number {
-    const scene = this.sceneMechanics.getCurrentScene();
-    const contents = this.getInventoryContents();
-    return contents.reduce((total, id) =>
-      total + (scene?.objects?.[id]?.weight || 0), 0);
+  getCurrentWeight(scene: Scene): number {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
+    const contents = this.getInventoryContents(scene);
+    return contents.reduce((total, obj) =>
+      total + (obj.weight ?? 0), 0);
   }
 
   /**
    * List all items in inventory with their names
    * @returns Array of item names
    */
-  listInventory(): string[] {
-    const scene = this.sceneMechanics.getCurrentScene();
-    if (!scene?.objects) return [];
+  listInventory(scene: Scene): SceneObject[] {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
 
-    const contents = this.getInventoryContents();
-    return contents.filter(id => scene.objects?.[id])
-      .map(id => scene.objects![id].name);
+    return this.getInventoryContents(scene);
   }
 
   /**
    * Add an object to the inventory
-   * @param objectId ID of the object to take
+   * @param scene
+   * @param object
    * @returns Success status, message, and optional score
    */
-  addObjectToInventory(objectId: string): CommandResponse {
-    const scene = this.sceneMechanics.getCurrentScene();
-    const object = scene?.objects?.[objectId];
+  addObjectToInventory(scene: Scene, object: SceneObject): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene');
+    }
 
     if (!object) {
-      return {
-        success: false,
-        message: this.gameTextService.get('error.objectNotFound', { item: objectId}),
-        incrementTurn: false
-      };
+      throw new Error('Invalid object');
     }
 
     if (!object.canTake) {
@@ -125,7 +123,7 @@ export class InventoryMechanicsService extends MechanicsBaseService {
       };
     }
 
-    if (this.hasItem(objectId)) {
+    if (this.hasItem(object)) {
       return {
         success: false,
         message: this.gameTextService.get('error.itemInInventory', { item: object.name}),
@@ -134,7 +132,7 @@ export class InventoryMechanicsService extends MechanicsBaseService {
     }
 
     // Check weight limit
-    const currentWeight = this.getCurrentWeight();
+    const currentWeight = this.getCurrentWeight(scene);
     if (currentWeight + (object.weight || 0) > this.getMaxInventoryWeight()) {
       return {
         success: false,
@@ -143,18 +141,8 @@ export class InventoryMechanicsService extends MechanicsBaseService {
       };
     }
 
-    // Check if object is in a container
-    if (this.containerMechanics.isInContainer(objectId)) {
-      const containerId = this.containerMechanics.getContainerFor(objectId);
-      if (containerId) {
-        this.containerMechanics.removeFromContainer(containerId, objectId);
-      }
-    } else {
-      this.sceneMechanics.removeObjectFromScene(objectId);
-    }
-
     // Add to inventory
-    this.setObjectInInventory(objectId, true);
+    this.setObjectInInventory(object.id, true);
 
     // Handle scoring through ScoreMechanicsService
     this.scoreMechanics.handleObjectScoring({
@@ -172,22 +160,20 @@ export class InventoryMechanicsService extends MechanicsBaseService {
 
   /**
    * Remove an object from inventory
-   * @param objectId ID of the object to drop
+   * @param scene
+   * @param object
    * @returns Success status and message
    */
-  removeObjectFromInventory(objectId: string): CommandResponse {
-    const scene = this.sceneMechanics.getCurrentScene();
-    const object = scene?.objects?.[objectId];
-
-    if (!object) {
-      return {
-        success: false,
-        message: this.gameTextService.get('error.objectNotFound', { item: objectId}),
-        incrementTurn: false
-      };
+  removeObjectFromInventory(scene: Scene, object: SceneObject): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene');
     }
 
-    if (!this.hasItem(objectId)) {
+    if (!object) {
+      throw new Error('Invalid object');
+    }
+
+    if (!this.hasItem(object)) {
       return {
         success: false,
         message: this.gameTextService.get('error.notHoldingItem', { item: object.name}),
@@ -196,7 +182,7 @@ export class InventoryMechanicsService extends MechanicsBaseService {
     }
 
     // Remove from inventory
-    this.setObjectInInventory(objectId, false);
+    this.setObjectInInventory(object.id, false);
 
     return {
       success: true,
@@ -219,21 +205,22 @@ export class InventoryMechanicsService extends MechanicsBaseService {
    * Get a list of all items currently in inventory
    * @returns Array of item IDs in inventory
    */
-  private getInventoryContents(): string[] {
-    const scene = this.sceneMechanics.getCurrentScene();
-    if (!scene?.objects) return [];
+  private getInventoryContents(scene: Scene): SceneObject[] {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
 
-    return Object.keys(scene.objects)
-      .filter(id => this.hasItem(id));
+    return Object.values(scene.objects)
+      .filter(obj => this.hasItem(obj));
   }
 
   /**
    * Check if inventory contains a specific item
-   * @param itemId ID of the item to check
    * @returns True if item is in inventory
+   * @param item
    */
-  hasItem(itemId: string): boolean {
-    return this.hasFlag(`${itemId}Has`);
+  hasItem(item: SceneObject): boolean {
+    return this.hasFlag(`${item.id}Has`);
   }
 
 }

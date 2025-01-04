@@ -107,13 +107,13 @@ export class GameTextService {
         // Movement messages
         'movement.cantGo': "You can't go that way.",
         'movement.blocked': "The way is blocked.",
-        'movement.newRoom': "You {action} to {exit}.",
+        'movement.newRoom': "You go {exit}.",
         'movement.noExit': "You don't see any {exit} here.",
         'movement.exitNotVisible': "It is too dark to see the {item} clearly.",
         'movement.exitNotOpenable': "The {exit} can't be {action}ed.",
         'movement.exitLocked': "The {exit} is locked.",
         'movement.exitAlreadyInState': "The {exit} is already {action}.",
-        'movement.exitStateChanged': "You {action{ the {exit}.",
+        'movement.exitStateChanged': "You {action} the {exit}.",
 
       // Scene
       'scene.objectAlreadyInScene': "{item} is already in the scene.",

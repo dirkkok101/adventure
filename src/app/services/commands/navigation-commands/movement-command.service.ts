@@ -48,12 +48,25 @@ import {GameTextService} from '../../game-text.service';
   providedIn: 'root'
 })
 export class MovementCommandService extends BaseCommandService {
-  public static readonly DIRECTIONS = new Set([
-    'north', 'south', 'east', 'west', 'up', 'down', 'climb',
-    'n', 's', 'e', 'w', 'u', 'd', 'c'
-  ]);
 
-  public static readonly DIRECTION_ALIASES: { [key: string]: string } = {
+  /**
+   * All valid movement verbs including directional commands
+   * This includes both explicit movement verbs and direction shortcuts
+   */
+  readonly verbs = [
+    'north',
+    'south',
+    'east',
+    'west',
+    'up',
+    'down',
+    'climb',
+  ] as const;
+  /**
+   * Maps direction aliases to their full names
+   * @private
+   */
+  protected override readonly verbAliases: { [key: string]: string } = {
     'n': 'north',
     's': 'south',
     'e': 'east',
@@ -72,7 +85,7 @@ export class MovementCommandService extends BaseCommandService {
     scoreMechanicsService: ScoreMechanicsService,
     containerMechanicsService: ContainerMechanicsService,
     private gameTextService: GameTextService,
-    private movementMechanics: MovementMechanicsService
+    private movementMechanicsService: MovementMechanicsService
   ) {
     super(
       gameStateService,
@@ -86,15 +99,6 @@ export class MovementCommandService extends BaseCommandService {
   }
 
   /**
-   * Check if this command service can handle the given command
-   * @param command Command to check
-   * @returns True if command can be handled
-   */
-  canHandle(command: GameCommand): boolean {
-    return command.verb === 'enter' || this.resolveDirection(command) !== null;
-  }
-
-  /**
    * Handle a movement command
    * @param command Command to handle
    * @returns Response indicating success/failure and message
@@ -105,16 +109,58 @@ export class MovementCommandService extends BaseCommandService {
    * - Exit blocked by required flags
    * - Too dark to move
    */
-  handle(command: GameCommand): CommandResponse {
-    const direction = this.resolveDirection(command);
-    if (direction) {
-      return this.movementMechanics.handleMovement(direction);
+  override handle(command: GameCommand): CommandResponse {
+// Validate command format
+    if (!command.object) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.noObject', {
+          action: this.getPrimaryVerb(command.verb)
+        }),
+        incrementTurn: false
+      };
+    }
+
+    // Get current scene
+    const scene = this.sceneMechanicsService.getCurrentScene();
+    if (!scene) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.noScene'),
+        incrementTurn: false
+      };
+    }
+
+    // Check light
+    if (!this.lightMechanicsService.isLightPresent(scene)) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.tooDark', {action: command.verb}),
+        incrementTurn: false
+      };
+    }
+
+    // Get the exit if it is valid
+    const exit = this.movementMechanicsService.getExit(scene, command.object);
+    if(!exit)
+    {
+      return {
+        success: false,
+        message: this.gameTextService.get('movement.cantGo', {action: command.verb}),
+        incrementTurn: false
+      };
+    }
+
+    // Move through the exit
+    const moveResult = this.movementMechanicsService.moveToExit(scene, exit);
+    if (!moveResult) {
+      return moveResult;
     }
 
     return {
-      success: false,
-      message: this.gameTextService.get('error.movementDirection'),
-      incrementTurn: false
+      success: true,
+      message: this.gameTextService.get('movement.newRoom', {exit: exit.direction}),
+      incrementTurn: true
     };
   }
 
@@ -122,36 +168,45 @@ export class MovementCommandService extends BaseCommandService {
    * Get command suggestions based on current context
    * @param command Partial command to get suggestions for
    * @returns Array of suggested command completions
+   *
+   * State Dependencies:
+   * - Scene state via SceneMechanicsService
+   * - Movement state via MovementMechanicsService
+   *
+   * Suggestion Types:
+   * 1. No verb: Suggest all direction verbs
+   * 2. Partial verb: Suggest matching direction verbs
+   * 3. Full verb with no object: Suggest available exits
+   * 4. Full verb with partial object: Filter available exits
+   *
+   * @throws None - Returns empty array on error
    */
   override getSuggestions(command: GameCommand): string[] {
-    // For 'go' or 'move' commands without object, suggest all directions
-    if ((command.verb === 'go' || command.verb === 'move') && !command.object) {
-      return ['north', 'south', 'east', 'west', 'up', 'down'];
+// Use base class for verb suggestions if no verb or partial verb
+    if (!command.verb || !this.canHandle(command)) {
+      return this.getVerbSuggestions(command.verb);
     }
 
-    // For directional commands, get available exits
-    return this.movementMechanics.getAvailableExits().map(x => x.description);
+    // Get current scene and check light
+    const scene = this.sceneMechanicsService.getCurrentScene();
+    if (!scene || !this.lightMechanicsService.isLightPresent(scene)) {
+      return [];
+    }
+
+    const exits = this.movementMechanicsService.getAvailableExits(scene);
+
+    const verb = this.getPrimaryVerb(command.verb);
+
+    // If we have a partial object, filter the suggestions
+    if (command.object) {
+      const partialObject = command.object.toLowerCase();
+      return exits
+        .filter(obj => obj.direction.toLowerCase().startsWith(partialObject))
+        .map(obj => `$${obj.direction}`);
+    }
+
+    // Return all possible objects if no partial object specified
+    return exits.map(obj => `${obj.direction}`);
   }
 
-  /**
-   * Resolve a command into a valid direction
-   * @param command Command to resolve
-   * @returns Resolved direction or null if invalid
-   */
-  protected resolveDirection(command: GameCommand): string | null {
-    let direction = command.verb;
-
-    // Handle 'go', 'move', or 'enter' commands with directional objects
-    if ((command.verb === 'go' || command.verb === 'move' || command.verb === 'enter') && command.object) {
-      direction = command.object;
-    }
-
-    // Check if it's a valid direction
-    if (!MovementCommandService.DIRECTIONS.has(direction.toLowerCase())) {
-      return null;
-    }
-
-    // Resolve aliases
-    return MovementCommandService.DIRECTION_ALIASES[direction.toLowerCase()] || direction.toLowerCase();
-  }
 }

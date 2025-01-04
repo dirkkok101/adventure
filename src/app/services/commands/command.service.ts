@@ -1,17 +1,21 @@
-import {Injectable} from '@angular/core';
-import {CommandResponse, GameCommand} from '../../models';
-import {MovementCommandService} from './navigation-commands/movement-command.service';
-import {InventoryCommandService} from './container-commands/inventory-command.service';
-import {DropObjectCommandService} from './object-commands/drop-object-command.service';
-import {LookCommandService} from './vision-commands/look-command.service';
-import {ExamineCommandService} from './vision-commands/examine-command.service';
-import {OpenCloseContainerCommandService} from './container-commands/open-close-container-command.service';
-import {TakeObjectCommandService} from './object-commands/take-object-command.service';
-import {PutInContainerCommandService} from './container-commands/put-in-container-command.service';
-import {ReadObjectCommandService} from './object-commands/read-object-command.service';
-import {TurnLightSourceOnOffCommandService} from './light-source-commands/turn-light-source-on-off-command.service';
-import {MoveObjectCommandService} from './object-commands/move-object-command.service';
-import {ICommandService} from './command-types';
+import { Injectable } from "@angular/core";
+import { CommandResponse, GameCommand } from "../../models";
+import { ICommandService } from "./command-types";
+import { InventoryCommandService } from "./container-commands/inventory-command.service";
+import { PutInContainerCommandService } from "./container-commands/put-in-container-command.service";
+import { MovementCommandService } from "./navigation-commands/movement-command.service";
+import { DropObjectCommandService } from "./object-commands/drop-object-command.service";
+import { MoveObjectCommandService } from "./object-commands/move-object-command.service";
+import { ReadObjectCommandService } from "./object-commands/read-object-command.service";
+import { TakeObjectCommandService } from "./object-commands/take-object-command.service";
+import { ExamineCommandService } from "./vision-commands/examine-command.service";
+import { LookCommandService } from "./vision-commands/look-command.service";
+import {OpenExitCommandService} from './navigation-commands/open-exit-command.service';
+import {CloseExitCommandService} from './navigation-commands/close-exit-command.service';
+import {SwitchOnLightSourceCommandService} from './light-source-commands/switch-on-light-source-command.service';
+import {SwitchOffLightSourceCommandService} from './light-source-commands/switch-off-light-source-command.service';
+import {OpenContainerCommandService} from './container-commands/open-container.command.service';
+import {CloseContainerCommandService} from './container-commands/close-container-command.service';
 
 /**
  * Service responsible for processing and routing game commands.
@@ -25,9 +29,8 @@ import {ICommandService} from './command-types';
  *
  * Command Processing Flow:
  * 1. Parse raw input into GameCommand
- * 2. Normalize verbs (aliases, directions)
- * 3. Route to appropriate handler
- * 4. Process handler response
+ * 2. Route to appropriate handler
+ * 3. Process handler response
  *
  * Error Handling:
  * - Invalid commands return friendly messages
@@ -38,28 +41,19 @@ import {ICommandService} from './command-types';
   providedIn: 'root'
 })
 export class CommandService {
-  /** Map of verb shortcuts to full verb names */
-  private static readonly VERB_ALIASES: Readonly<Record<string, string>> = {
-    'l': 'look',
-    'i': 'inventory',
-    'x': 'examine',
-    'get': 'take',
-    'grab': 'take',
-    'place': 'put',
-    'check': 'examine',
-    'go': 'enter'
-  };
-
   /** List of registered command handlers */
   private readonly commandHandlers: ICommandService[];
 
   constructor(
+    private readonly closeContainerCommandService: CloseContainerCommandService,
     private readonly inventoryCommandService: InventoryCommandService,
-    private readonly openCloseContainerCommandService: OpenCloseContainerCommandService,
+    private readonly openContainerCommandService: OpenContainerCommandService,
     private readonly putInContainerCommandService: PutInContainerCommandService,
-    private readonly turnLightSourceOnOffCommandService: TurnLightSourceOnOffCommandService,
+    private readonly switchOffLightSourceCommandService: SwitchOffLightSourceCommandService,
+    private readonly switchOnLightSourceCommandService: SwitchOnLightSourceCommandService,
     private readonly movementCommandService: MovementCommandService,
-    private readonly openCloseExitCommandService: OpenCloseContainerCommandService,
+    private readonly openExitCommandService: OpenExitCommandService,
+    private readonly closeExitCommandService: CloseExitCommandService,
     private readonly dropObjectCommandService: DropObjectCommandService,
     private readonly moveObjectCommandService: MoveObjectCommandService,
     private readonly readObjectCommandService: ReadObjectCommandService,
@@ -81,15 +75,6 @@ export class CommandService {
       const command = this.parseCommand(input?.toLowerCase());
       if (!command) {
         return this.createErrorResponse('invalidCommand');
-      }
-
-      // Normalize command verb
-      command.verb = CommandService.VERB_ALIASES[command.verb] || command.verb;
-
-      // Handle movement commands
-      if (MovementCommandService.DIRECTIONS.has(command.verb)) {
-        command.verb = MovementCommandService.DIRECTION_ALIASES[command.verb] || command.verb;
-        return this.movementCommandService.handle(command);
       }
 
       // Find and execute appropriate handler
@@ -115,14 +100,8 @@ export class CommandService {
       const command = this.parseCommand(input?.toLowerCase());
       if (!command) return [];
 
-      const suggestions = new Set<string>();
-
-      // Add basic verb suggestions for short/empty input
-      if (this.shouldAddBasicSuggestions(command, input)) {
-        this.addBasicSuggestions(suggestions);
-      }
-
       // Get context-specific suggestions from handlers
+      const suggestions = new Set<string>();
       this.addHandlerSuggestions(command, suggestions);
 
       // Filter and sort suggestions
@@ -142,7 +121,7 @@ export class CommandService {
     if (!input?.trim()) return null;
 
     const parts = input.trim().split(/\s+/);
-    const verb = this.normalizeVerb(parts[0]);
+    const verb = parts[0];
 
     return {
       verb,
@@ -157,23 +136,21 @@ export class CommandService {
    */
   private initializeHandlers(): ICommandService[] {
     const handlers = [
+      this.closeContainerCommandService,
       this.inventoryCommandService,
-      this.openCloseContainerCommandService,
+      this.openContainerCommandService,
       this.putInContainerCommandService,
-
-      this.turnLightSourceOnOffCommandService,
-
+      this.switchOffLightSourceCommandService,
+      this.switchOnLightSourceCommandService,
+      this.closeExitCommandService,
       this.movementCommandService,
-      this.openCloseExitCommandService,/////8
-
+      this.openExitCommandService,
       this.dropObjectCommandService,
       this.moveObjectCommandService,
       this.readObjectCommandService,
       this.takeObjectCommandService,
-
       this.examineCommandService,
       this.lookCommandService,
-
     ];
 
     return handlers.filter(this.isValidHandler);
@@ -218,38 +195,6 @@ export class CommandService {
   }
 
   /**
-   * Normalize verb based on aliases and directions
-   * @param verb Verb to normalize
-   * @private
-   */
-  private normalizeVerb(verb: string): string {
-    if (MovementCommandService.DIRECTIONS.has(verb)) {
-      return 'go';
-    }
-    return CommandService.VERB_ALIASES[verb] || verb;
-  }
-
-  /**
-   * Check if basic suggestions should be added
-   * @param command Current command
-   * @param input Raw input
-   * @private
-   */
-  private shouldAddBasicSuggestions(command: GameCommand, input: string): boolean {
-    return !command.object && (!command.verb || input.length <= 2);
-  }
-
-  /**
-   * Add basic verb and direction suggestions
-   * @param suggestions Set to add suggestions to
-   * @private
-   */
-  private addBasicSuggestions(suggestions: Set<string>): void {
-    Object.keys(CommandService.VERB_ALIASES).forEach(verb => suggestions.add(verb));
-    Array.from(MovementCommandService.DIRECTIONS).forEach(dir => suggestions.add(dir));
-  }
-
-  /**
    * Add suggestions from command handlers
    * @param command Current command
    * @param suggestions Set to add suggestions to
@@ -258,16 +203,14 @@ export class CommandService {
   private addHandlerSuggestions(command: GameCommand, suggestions: Set<string>): void {
     const handlerSuggestions =
       this.commandHandlers
-        .filter(handler => handler.canHandle(command))
         .map(handler => {
-            try {
-              return handler.getSuggestions!(command);
-            } catch (error) {
-              console.error('Error getting suggestions from handler:', error);
-              return [];
-            }
+          try {
+            return handler.getSuggestions!(command);
+          } catch (error) {
+            console.error('Error getting suggestions from handler:', error);
+            return [];
           }
-        );
+        });
 
     handlerSuggestions.flat().forEach(s => suggestions.add(s));
   }

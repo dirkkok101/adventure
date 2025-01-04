@@ -10,6 +10,7 @@ import {ProgressMechanicsService} from "../../mechanics/progress-mechanics.servi
 import {SceneMechanicsService} from "../../mechanics/scene-mechanics.service";
 import {ScoreMechanicsService} from "../../mechanics/score-mechanics.service";
 import {BaseCommandService} from "../base-command.service";
+import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics.service';
 
 /**
  * Command service for handling 'put' commands that place items into containers.
@@ -45,6 +46,17 @@ import {BaseCommandService} from "../base-command.service";
   providedIn: 'root'
 })
 export class PutInContainerCommandService extends BaseCommandService {
+  /**
+   * Primary verbs for command
+   */
+  readonly verbs = ['put'] as const;
+  /**
+   * Verb aliases mapping
+   */
+  protected override readonly verbAliases: { [key: string]: string } = {
+    'p': 'put'
+  };
+
   constructor(
     gameStateService: GameStateService,
     sceneMechanicsService: SceneMechanicsService,
@@ -53,6 +65,7 @@ export class PutInContainerCommandService extends BaseCommandService {
     inventoryMechanicsService: InventoryMechanicsService,
     containerMechanicsService: ContainerMechanicsService,
     scoreMechanicsService: ScoreMechanicsService,
+    private examinationMechanicsService: ExaminationMechanicsService,
     private commandSuggestionService: CommandSuggestionService,
     private gameTextService: GameTextService
   ) {
@@ -67,58 +80,92 @@ export class PutInContainerCommandService extends BaseCommandService {
     );
   }
 
-  canHandle(command: GameCommand): boolean {
-    return command.verb === 'put' && !!command.object && !!command.target;
+  /**
+   * Checks if this service can handle the given command
+   * @param command Command to check
+   * @returns True if command is a valid put command
+   *
+   * Valid Commands:
+   * - "put [item] in [container]"
+   * - "p [item] in [container]"
+   */
+  override canHandle(command: GameCommand): boolean {
+    // First check if the verb is valid using base class logic
+    if (!super.canHandle(command)) {
+      return false;
+    }
+
+    return command.preposition === 'in' && !!command.object && !!command.target;
   }
 
   /**
    * Handles the 'put' command by transferring an item from inventory to a container
-   *
-   * @param command - The game command containing item and container information
+   * @param command The game command containing item and container information
    * @returns CommandResponse indicating success/failure and appropriate message
    *
+   * State Dependencies:
+   * - Inventory state via InventoryMechanicsService
+   * - Container state via ContainerMechanicsService
+   * - Scene state via SceneMechanicsService
+   * - Light state via LightMechanicsService
+   *
    * State Effects:
-   * - Updates inventory state through InventoryMechanicsService
-   * - Updates container state through ContainerMechanicsService
-   * - May update score state through ScoreMechanicsService
+   * - Updates inventory state
+   * - Updates container state
+   * - May update score state
    *
    * Error Conditions:
+   * - Missing object or target
+   * - Invalid preposition (not 'in')
    * - Scene not visible
    * - Item not in inventory
    * - Container not accessible
    * - Container validation fails
    */
-  handle(command: GameCommand): CommandResponse {
-    if (!command.object || command.target) {
+  override handle(command: GameCommand): CommandResponse {
+    // Validate command format
+    if (!command.object) {
       return {
         success: false,
-        message: this.gameTextService.get('error.noObject', {action: command.verb}),
+        message: this.gameTextService.get('error.noObject', {
+          action: this.getPrimaryVerb(command.verb)
+        }),
         incrementTurn: false
       };
     }
 
-    // 2. Scene Validation
+    // Get current scene
     const scene = this.sceneMechanicsService.getCurrentScene();
     if (!scene) {
       return {
         success: false,
-        message: this.gameTextService.get('error.noScene', {action: command.verb}),
+        message: this.gameTextService.get('error.noScene'),
         incrementTurn: false
       };
     }
 
-    // Check if there's enough light to interact
-    if (!this.lightMechanicsService.isLightPresent()) {
+    // Check light
+    if (!this.lightMechanicsService.isLightPresent(scene)) {
       return {
         success: false,
-        message: this.gameTextService.get('error.tooDark'),
+        message: this.gameTextService.get('error.tooDark', {action: command.verb}),
+        incrementTurn: false
+      };
+    }
+
+    // Find and validate object
+    const object = this.sceneMechanicsService.findObjectByName(scene, command.object);
+    if (!object) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.objectNotFound', {item: command.object}),
         incrementTurn: false
       };
     }
 
     // 4. Object Resolution
-    const item = this.sceneMechanicsService.findObject(command.object);
-    const container = this.sceneMechanicsService.findObject(command.target ?? '');
+    const item = this.sceneMechanicsService.findObjectByName(scene, command.object);
+    const container = this.sceneMechanicsService.findObjectByName(scene, command.target ?? '');
 
     if (!item) {
       return {
@@ -136,17 +183,8 @@ export class PutInContainerCommandService extends BaseCommandService {
       };
     }
 
-    // 5. Container Validation
-    if (!container.isContainer) {
-      return {
-        success: false,
-        message: `The ${container.name} isn't a container.`,
-        incrementTurn: false
-      };
-    }
-
     // 6. Inventory Check
-    if (!this.inventoryMechanicsService.hasItem(item.id)) {
+    if (!this.inventoryMechanicsService.hasItem(item)) {
       return {
         success: false,
         message: `You don't have the ${item.name}.`,
@@ -156,13 +194,13 @@ export class PutInContainerCommandService extends BaseCommandService {
 
     // 10. State Update
     // a. Add to container
-    const addResult = this.containerMechanicsService.addToContainer(container.id, item.id);
+    const addResult = this.containerMechanicsService.addToContainer(scene, container, item.id);
     if (!addResult.success) {
       return addResult;
     }
 
     // b. Remove from inventory
-    const removeResult = this.inventoryMechanicsService.removeObjectFromInventory(item.id);
+    const removeResult = this.inventoryMechanicsService.removeObjectFromInventory(scene, item);
     if (!removeResult.success) {
       return removeResult;
     }
@@ -177,36 +215,57 @@ export class PutInContainerCommandService extends BaseCommandService {
 
   /**
    * Provides suggestions for the 'put' command based on current inventory and visible containers
-   *
-   * @param command - The current command being typed
-   * @returns Array of suggested completions
+   * @param command The current command being typed
+   * @returns Array of suggested command completions
    *
    * State Dependencies:
-   * - Inventory contents
-   * - Scene visibility
-   * - Container accessibility
+   * - Inventory state via InventoryMechanicsService
+   * - Scene state via SceneMechanicsService
+   * - Light state via LightMechanicsService
+   * - Container state via ContainerMechanicsService
+   *
+   * Suggestion Types:
+   * 1. No verb: Suggest primary verb ('put')
+   * 2. Partial verb: Suggest matching verbs
+   * 3. Full verb, no object: Suggest inventory items
+   * 4. Full verb and object: Suggest 'in' preposition
+   * 5. Full verb, object, and 'in': Suggest visible containers
+   * 6. Full command: No suggestions
+   *
+   * @throws None - Returns empty array on error
    */
   override getSuggestions(command: GameCommand): string[] {
-    if (!command.verb || command.verb !== 'put') {
-      return [];
+// Use base class for verb suggestions if no verb or partial verb
+    if (!command.verb || !this.canHandle(command)) {
+      return this.getVerbSuggestions(command.verb);
     }
 
-    // Check if there's enough light to interact
-    if (!this.lightMechanicsService.isLightPresent()) {
-      return [];
-    }
-
+    // Get current scene and check light
     const scene = this.sceneMechanicsService.getCurrentScene();
-
-    // If no object specified yet, suggest inventory items
-    if (!command.object) {
-      const inventory = this.inventoryMechanicsService.listInventory();
-      return inventory.map(id => scene.objects?.[id]?.name || '').filter(Boolean);
+    if (!scene || !this.lightMechanicsService.isLightPresent(scene)) {
+      return [];
     }
 
-    // If object specified but no target, suggest containers
-    if (command.object && !command.target) {
-      return this.commandSuggestionService.getContainerSuggestions(command);
+    const verb = this.getPrimaryVerb(command.verb);
+
+    // If we have a verb but no object, suggest inventory items
+    if (!command.object) {
+      return this.inventoryMechanicsService.listInventory(scene)
+        .map(item => `${verb} ${item.name}`);
+    }
+
+    // If we have an object but no preposition, suggest 'in'
+    if (!command.preposition) {
+      return [`${verb} ${command.object} in`];
+    }
+
+    // If we have 'in' preposition but no target, suggest containers
+    if (command.preposition === 'in' && !command.target) {
+      return this.getKnownObjectsNotOwned(scene)
+        .filter(obj =>
+          obj.isContainer
+        )
+        .map(container => `${verb} ${command.object} in ${container.name}`);
     }
 
     return [];

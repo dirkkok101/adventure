@@ -3,7 +3,7 @@ import {LightMechanicsService} from './light-mechanics.service';
 import {SceneMechanicsService} from './scene-mechanics.service';
 import {ScoreMechanicsService} from './score-mechanics.service';
 import {GameTextService} from '../game-text.service';
-import {CommandResponse, SceneObject} from '../../models';
+import {CommandResponse, Scene, SceneObject} from '../../models';
 import {MechanicsBaseService} from './mechanics-base.service';
 import {GameStateService} from '../game-state.service';
 import {ExaminationMechanicsService} from './examination-mechanics.service';
@@ -46,19 +46,148 @@ import {ExaminationMechanicsService} from './examination-mechanics.service';
  * - State dependencies documented per method
  */
 @Injectable({
-    providedIn: 'root'
+  providedIn: 'root'
 })
 export class MoveObjectMechanicsService extends MechanicsBaseService {
-    constructor(
-        private lightMechanicsService: LightMechanicsService,
-        private sceneMechanicsService: SceneMechanicsService,
-        private scoreMechanicsService: ScoreMechanicsService,
-        private gameTextService: GameTextService,
-        private examinationMechanicsService: ExaminationMechanicsService,
-        gameStateService: GameStateService
-    ) {
-      super(gameStateService)
+  constructor(
+    private lightMechanicsService: LightMechanicsService,
+    private gameTextService: GameTextService,
+    private examinationMechanicsService: ExaminationMechanicsService,
+    gameStateService: GameStateService
+  ) {
+    super(gameStateService)
+  }
+
+  /**
+   * Check if an object can be moved
+   * @param scene
+   * @param object
+   * @returns CommandResponse indicating if movement is possible
+   *
+   * State Dependencies:
+   * - [objectId]_visible via LightMechanicsService
+   * - [objectId]_moveable via FlagMechanicsService
+   * - [sceneId]_light via LightMechanicsService
+   *
+   * Error Conditions:
+   * - object is null/undefined: Returns error
+   * - object not visible: Returns error with visibility message
+   * - object not moveable: Returns error with moveability message
+   *
+   * @throws None - All errors returned in CommandResponse
+   */
+  canMoveObject(scene: Scene, object: SceneObject): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
     }
+
+    if (!object) {
+      throw new Error('Invalid object');
+    }
+
+    // Check visibility through LightMechanicsService
+    if (!this.lightMechanicsService.isObjectVisible(object)) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.tooDark', {action: 'move'}),
+        incrementTurn: false
+      };
+    }
+
+    if (!this.isObjectMoveable(object.id)) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.cantMove', {object: object.name}),
+        incrementTurn: false
+      };
+    }
+
+    return {
+      success: true,
+      message: '',
+      incrementTurn: false
+    };
+  }
+
+  /**
+   * Move an object within its current scene
+   * @param scene
+   * @param object Object to move
+   * @returns CommandResponse with movement result
+   *
+   * State Dependencies:
+   * - All dependencies from canMoveObject
+   * - [objectId]_moved via FlagMechanicsService
+   * - Score state via ScoreMechanicsService
+   *
+   * State Effects:
+   * - Sets [objectId]_moved flag
+   * - Updates score if applicable
+   *
+   * Error Conditions:
+   * - All conditions from canMoveObject
+   * - State update failure: Returns error
+   *
+   * @throws None - All errors returned in CommandResponse
+   */
+  moveObject(scene: Scene, object: SceneObject): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
+    if (!object) {
+      throw new Error('Invalid object');
+    }
+
+    // Validate movement
+    const canMove = this.canMoveObject(scene, object);
+    if (!canMove.success) {
+      return canMove;
+    }
+
+    // Set movement flag
+    this.setObjectMoved(object.id);
+
+    // Return custom message if defined, otherwise default
+    return {
+      success: true,
+      message: object.onMove || this.gameTextService.get('success.moveObject', {object: object.name}),
+      incrementTurn: true
+    };
+
+  }
+
+  /**
+   * Get list of moveable objects in current scene
+   * @returns Array of object names that can be moved
+   *
+   * State Dependencies:
+   * - [sceneId]_current via SceneMechanicsService
+   * - [objectId]_visible via LightMechanicsService
+   * - [objectId]_moveable via FlagMechanicsService
+   *
+   * Error Conditions:
+   * - Scene not found: Returns empty array
+   * - No visible objects: Returns empty array
+   *
+   * @throws None - Returns empty array on error
+   */
+  getMoveableObjects(scene: Scene): SceneObject[] {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
+    const movableObjects: SceneObject[] = [];
+    const examinableObjects = this.examinationMechanicsService.getExaminableObjects(scene);
+
+    for (const obj of examinableObjects) {
+      if (this.canMoveObject(scene, obj).success) {
+        movableObjects.push(obj);
+      }
+    }
+
+    return Array.from(movableObjects);
+  }
 
   /**
    * Set whether an object is moveable
@@ -96,138 +225,4 @@ export class MoveObjectMechanicsService extends MechanicsBaseService {
       this.removeFlag(`${objectId}_${flag}`);
     }
   }
-
-
-
-    /**
-     * Check if an object can be moved
-     * @param object Object to check
-     * @returns CommandResponse indicating if movement is possible
-     *
-     * State Dependencies:
-     * - [objectId]_visible via LightMechanicsService
-     * - [objectId]_moveable via FlagMechanicsService
-     * - [sceneId]_light via LightMechanicsService
-     *
-     * Error Conditions:
-     * - object is null/undefined: Returns error
-     * - object not visible: Returns error with visibility message
-     * - object not moveable: Returns error with moveability message
-     *
-     * @throws None - All errors returned in CommandResponse
-     */
-    canMoveObject(object: SceneObject): CommandResponse {
-        // Validate input
-        if (!object?.id) {
-            return {
-                success: false,
-                message: this.gameTextService.get('error.invalidObject'),
-                incrementTurn: false
-            };
-        }
-
-        // Check visibility through LightMechanicsService
-        if (!this.lightMechanicsService.isObjectVisible(object)) {
-            return {
-                success: false,
-                message: this.gameTextService.get('error.tooDark', { action: 'move' }),
-                incrementTurn: false
-            };
-        }
-
-        // Check moveability through FlagMechanicsService
-        if (!this.isObjectMoveable(object.id)) {
-            return {
-                success: false,
-                message: this.gameTextService.get('error.cantMove', { object: object.name }),
-                incrementTurn: false
-            };
-        }
-
-        return {
-            success: true,
-            message: '',
-            incrementTurn: false
-        };
-    }
-
-    /**
-     * Move an object within its current scene
-     * @param object Object to move
-     * @returns CommandResponse with movement result
-     *
-     * State Dependencies:
-     * - All dependencies from canMoveObject
-     * - [objectId]_moved via FlagMechanicsService
-     * - Score state via ScoreMechanicsService
-     *
-     * State Effects:
-     * - Sets [objectId]_moved flag
-     * - Updates score if applicable
-     *
-     * Error Conditions:
-     * - All conditions from canMoveObject
-     * - State update failure: Returns error
-     *
-     * @throws None - All errors returned in CommandResponse
-     */
-    moveObject(object: SceneObject): CommandResponse {
-        // Validate movement
-        const canMove = this.canMoveObject(object);
-        if (!canMove.success) {
-            return canMove;
-        }
-
-
-            // Set movement flag
-            this.setObjectMoved(object.id);
-
-
-
-            // Return custom message if defined, otherwise default
-            return {
-                success: true,
-                message: object.onMove || this.gameTextService.get('success.moveObject', { object: object.name }),
-                incrementTurn: true
-            };
-
-    }
-
-
-    /**
-     * Get list of moveable objects in current scene
-     * @returns Array of object names that can be moved
-     *
-     * State Dependencies:
-     * - [sceneId]_current via SceneMechanicsService
-     * - [objectId]_visible via LightMechanicsService
-     * - [objectId]_moveable via FlagMechanicsService
-     *
-     * Error Conditions:
-     * - Scene not found: Returns empty array
-     * - No visible objects: Returns empty array
-     *
-     * @throws None - Returns empty array on error
-     */
-    getMoveableObjects(): string[] {
-        try {
-            const scene = this.sceneMechanicsService.getCurrentScene();
-            if (!scene?.objects) return [];
-
-            const suggestions = new Set<string>();
-            const visibleObjects = this.examinationMechanicsService.getExaminableObjects();
-
-            for (const obj of visibleObjects) {
-                if (this.isObjectMoveable(obj.id) &&
-                    this.lightMechanicsService.isObjectVisible(obj)) {
-                    suggestions.add(obj.name.toLowerCase());
-                }
-            }
-
-            return Array.from(suggestions);
-        } catch (error) {
-            console.error('Error getting moveable objects:', error);
-            return [];
-        }
-    }
 }

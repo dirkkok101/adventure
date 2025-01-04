@@ -57,6 +57,18 @@ import {ExaminationMechanicsService} from '../../mechanics/examination-mechanics
   providedIn: 'root'
 })
 export class TakeObjectCommandService extends BaseCommandService {
+  /**
+   * Primary verbs for command
+   */
+  readonly verbs = ['take', 'get'] as const;
+  /**
+   * Verb aliases mapping
+   */
+  protected override readonly verbAliases: { [key: string]: string } = {
+    't': 'take',
+    'g': 'get',
+  };
+
   constructor(
     gameStateService: GameStateService,
     sceneMechanicsService: SceneMechanicsService,
@@ -80,15 +92,6 @@ export class TakeObjectCommandService extends BaseCommandService {
   }
 
   /**
-   * Checks if this service can handle the given command
-   * @param command Command to check
-   * @returns True if command is a valid take/get/pick command
-   */
-  canHandle(command: GameCommand): boolean {
-    return command.verb === 'take' || command.verb === 'get' || command.verb === 'pick';
-  }
-
-  /**
    * Handles the take command execution
    * @param command Command to execute
    * @returns Response indicating success/failure and appropriate message
@@ -101,18 +104,38 @@ export class TakeObjectCommandService extends BaseCommandService {
    * - Updates progressMechanicsService state (via ProgressMechanics)
    */
   handle(command: GameCommand): CommandResponse {
-
     // Validate command format
     if (!command.object) {
       return {
         success: false,
-        message: this.gameTextService.get('error.noObject', {action: command.verb}),
+        message: this.gameTextService.get('error.noObject', {
+          action: this.getPrimaryVerb(command.verb)
+        }),
+        incrementTurn: false
+      };
+    }
+
+    // Get current scene
+    const scene = this.sceneMechanicsService.getCurrentScene();
+    if (!scene) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.noScene'),
+        incrementTurn: false
+      };
+    }
+
+    // Check light
+    if (!this.lightMechanicsService.isLightPresent(scene)) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.tooDark', {action: command.verb}),
         incrementTurn: false
       };
     }
 
     // Find and validate object
-    const object = this.sceneMechanicsService.findObject(command.object);
+    const object = this.sceneMechanicsService.findObjectByName(scene, command.object);
     if (!object) {
       return {
         success: false,
@@ -121,19 +144,12 @@ export class TakeObjectCommandService extends BaseCommandService {
       };
     }
 
-    // Get current scene
-    const currentScene = this.sceneMechanicsService.getCurrentScene();
-    if (!currentScene) {
-      return {
-        success: false,
-        message: this.gameTextService.get('error.noScene'),
-        incrementTurn: false
-      };
-    }
+    // Return the objects in the scene and in open containers, filter out the ones we already have
+    const objectsWeCanTake = this.getKnownObjectsNotOwned(scene);
 
-    const visibleObjects = this.examinationMechanicsService.getExaminableObjects()
-    const visibleObject = visibleObjects.find(x => x.id === object.id);
-    if (!visibleObject) {
+    // Check to ensure the object we want to take is in the list of objects we can take
+    const objectToTake = objectsWeCanTake.find(obj => obj.id === object.id);
+    if (!objectToTake) {
       return {
         success: false,
         message: this.gameTextService.get('error.objectNotVisible', {item: object.name}),
@@ -141,36 +157,26 @@ export class TakeObjectCommandService extends BaseCommandService {
       };
     }
 
-    // Check take possibility through InventoryMechanics
-    const hasItem = this.inventoryMechanicsService.hasItem(object.id);
-    if (!hasItem) {
-      return {
-        success: false,
-        message: this.gameTextService.get('error.itemInInventory', {item: object.name}),
-        incrementTurn: false
-      };
-    }
+    // Find the container that contains the object
+    const container = this.containerMechanicsService.findContainerWithItem(scene, object.id);
 
-
-    // Perform take operation through mechanics services
-    // Find container through ContainerMechanics
-    const container = this.containerMechanicsService.findContainerWithItem(object.id);
-
-    // Start atomic operation
     let takeResult;
 
     // Take object through appropriate mechanics service
     if (container) {
-      takeResult = this.containerMechanicsService.removeFromContainer(object.id, container.id);
+      // Remove the object from the container
+      takeResult = this.containerMechanicsService.removeFromContainer(scene, container, object.id);
     } else {
-      takeResult = this.sceneMechanicsService.removeObjectFromScene(object.id);
+      // Remove the object from the scene
+      takeResult = this.sceneMechanicsService.removeObjectFromScene(scene, object);
     }
 
     if (!takeResult.success) {
       return takeResult;
     }
 
-    const addResult = this.inventoryMechanicsService.addObjectToInventory(object.id);
+    // Add the object to our inventory
+    const addResult = this.inventoryMechanicsService.addObjectToInventory(scene, object);
     if (!addResult.success) {
       return addResult;
     }
@@ -200,46 +206,31 @@ export class TakeObjectCommandService extends BaseCommandService {
    * - Inventory state (via InventoryMechanics)
    */
   override getSuggestions(command: GameCommand): string[] {
-    try {
-      if (!command.verb || !['take', 'get', 'pick'].includes(command.verb)) {
-        return [];
-      }
+    // Use base class for verb suggestions if no verb or partial verb
+    if (!command.verb || !this.canHandle(command)) {
+      return this.getVerbSuggestions(command.verb);
+    }
 
-      const scene = this.sceneMechanicsService.getCurrentScene();
-      if (!scene) return [];
-
-      const suggestions = new Set<string>();
-
-      const visibleObjects = this.examinationMechanicsService.getExaminableObjects();
-      for (const object of visibleObjects) {
-        const hasItem = this.inventoryMechanicsService.hasItem(object.id);
-        if (!hasItem) {
-          suggestions.add(object.name.toLowerCase());
-        }
-      }
-
-      // Get container objects through ContainerMechanics
-      const containers = visibleObjects.filter(obj => obj.isContainer);
-      for (const container of containers) {
-        const containerCheck = this.containerMechanicsService.isOpen(container.id);
-        if (!containerCheck) continue;
-
-        const contents = this.containerMechanicsService.getContainerContents(container);
-        for (const itemId of contents) {
-          const item = this.sceneMechanicsService.findObjectById(itemId);
-          if (item) {
-            const hasItem = this.inventoryMechanicsService.hasItem(item.id);
-            if (!hasItem) {
-              suggestions.add(item.name.toLowerCase());
-            }
-          }
-        }
-      }
-
-      return Array.from(suggestions);
-    } catch (error) {
-      console.error('Error getting take command suggestions:', error);
+    // Get current scene and check light
+    const scene = this.sceneMechanicsService.getCurrentScene();
+    if (!scene || !this.lightMechanicsService.isLightPresent(scene)) {
       return [];
     }
+
+    // Get the known objects in the scene that we don't own
+    const objectsWeCanTake = this.getKnownObjectsNotOwned(scene);
+
+    const verb = this.getPrimaryVerb(command.verb);
+
+    // If we have a partial object, filter suggestions
+    if (command.object) {
+      const partialObject = command.object.toLowerCase();
+      return objectsWeCanTake
+        .filter(obj => obj.name.toLowerCase().startsWith(partialObject))
+        .map(obj => `${verb} ${obj.name}`);
+    }
+
+    // Return all possible object combinations
+    return objectsWeCanTake.map(obj => `${verb} ${obj.name}`);
   }
 }

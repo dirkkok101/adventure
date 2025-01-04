@@ -1,6 +1,6 @@
 import {Injectable} from '@angular/core';
 import {SceneMechanicsService} from './scene-mechanics.service';
-import {CommandResponse, SceneObject} from '../../models';
+import {CommandResponse, Scene, SceneObject} from '../../models';
 import {InventoryMechanicsService} from './inventory-mechanics.service';
 import {MechanicsBaseService} from './mechanics-base.service';
 import {GameStateService} from '../game-state.service';
@@ -63,7 +63,6 @@ export class LightMechanicsService extends MechanicsBaseService {
   private readonly LANTERN_BATTERY_LIFE = 100;
 
   constructor(
-    private sceneService: SceneMechanicsService,
     private inventoryMechanics: InventoryMechanicsService,
     private gameTextService: GameTextService,
     gameStateService: GameStateService
@@ -76,13 +75,12 @@ export class LightMechanicsService extends MechanicsBaseService {
    * @returns Promise<boolean> True if the scene is illuminated
    * @throws Error if light state cannot be calculated
    */
-  isLightPresent(): boolean {
-    try {
-      return this.calculateLightPresence();
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error occurred';
-      throw new Error(`Failed to check light presence: ${message}`);
+  isLightPresent(scene: Scene): boolean {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
     }
+
+    return this.calculateLightPresence(scene);
   }
 
   /**
@@ -106,32 +104,31 @@ export class LightMechanicsService extends MechanicsBaseService {
    * @throws Error if object visibility cannot be determined
    */
   isObjectVisible(object: SceneObject): boolean {
-    try {
-      // Always visible if in inventory
-      if (this.inventoryMechanics.hasItem(object.id)) {
-        return true;
-      }
-
-      // Check if naturally visible
-      if (object.visibleOnEntry) {
-        return true;
-      }
-
-      // Check if revealed by other actions
-      return this.isObjectRevealed(object.id);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error occurred';
-      throw new Error(`Failed to check object visibility: ${message}`);
+    if (!object) {
+      throw new Error('Invalid scene object');
     }
+
+    // Always visible if in inventory
+    if (this.inventoryMechanics.hasItem(object)) {
+      return true;
+    }
+
+    // Check if naturally visible
+    if (object.visibleOnEntry) {
+      return true;
+    }
+
+    // Check if revealed by other actions
+    return this.isObjectRevealed(object.id);
   }
 
   /**
    * Checks if an object is a light source
-   * @param objectId ID of object to check
    * @returns True if object can provide light
+   * @param object
    */
-  isLightSource(objectId: string): boolean {
-    return this.hasObjectFlag(objectId, 'providesLight');
+  isLightSource(object: SceneObject): boolean {
+    return this.hasObjectFlag(object.id, 'providesLight');
   }
 
   /**
@@ -140,15 +137,20 @@ export class LightMechanicsService extends MechanicsBaseService {
    * - Checks if the source is depleted
    * - Updates global light state
    *
-   * @param objectId ID of the light source
+   * @param scene
+   * @param lightSource
    * @param turnOn Whether to turn the source on or off
    * @returns Promise<{ success: boolean; message: string }> Success status and message
    * @throws Error if light source state cannot be updated
    */
-  switchLightSourceOnOff(objectId: string, turnOn: boolean): CommandResponse {
+  switchLightSourceOnOff(scene: Scene, lightSource: SceneObject, turnOn: boolean): CommandResponse {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
 
-      const scene = this.sceneService.getCurrentScene();
-      const lightSource = scene?.objects?.[objectId];
+    if (!lightSource) {
+      throw new Error('Invalid light source');
+    }
 
       if (!lightSource?.providesLight) {
         return {
@@ -159,7 +161,7 @@ export class LightMechanicsService extends MechanicsBaseService {
       }
 
       // Check if light source is in inventory
-      if (!this.inventoryMechanics.hasItem(objectId)) {
+      if (!this.inventoryMechanics.hasItem(lightSource)) {
         return {
           success: false,
           message: this.gameTextService.get('error.notHoldingItem', { item : lightSource.name}),
@@ -168,23 +170,23 @@ export class LightMechanicsService extends MechanicsBaseService {
       }
 
       if (turnOn) {
-        if (this.isLightSourceDead(objectId)) {
+        if (this.isLightSourceDead(lightSource.id)) {
           return {
             success: false,
             message: this.gameTextService.get('light.isDead', { item : lightSource.name}),
             incrementTurn: false
           };
         }
-        this.setLightSourceOn(objectId, true);
-        this.updateLightState();
+        this.setLightSourceOn(lightSource.id, true);
+        this.updateLightState(scene);
         return {
           success: true,
           message: this.gameTextService.get('light.isOn', { item : lightSource.name}),
           incrementTurn: true
         };
       } else {
-        this.setLightSourceOn(objectId, false);
-        this.updateLightState();
+        this.setLightSourceOn(lightSource.id, false);
+        this.updateLightState(scene);
         return {
           success: true,
           message: this.gameTextService.get('light.isOff', { item : lightSource.name}),
@@ -244,10 +246,9 @@ export class LightMechanicsService extends MechanicsBaseService {
    * @returns Promise<boolean> True if the current scene is illuminated
    * @throws Error if scene data is invalid
    */
-  private calculateLightPresence(): boolean {
-    const scene = this.sceneService.getCurrentScene();
-    if (!scene) {
-      throw new Error('Cannot calculate light presence: No current scene');
+  private calculateLightPresence(scene: Scene): boolean {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
     }
 
     // Check scene natural light
@@ -255,19 +256,28 @@ export class LightMechanicsService extends MechanicsBaseService {
       return true;
     }
 
-    // Check for light sources in inventory
-    const lightSources = Object.entries(scene.objects || {})
-      .filter(([_, obj]) => obj.providesLight);
+    // Get all the light sources in the scene
+    const lightSources = this.getLightSources(scene);
 
-    for (const [id, _] of lightSources) {
-      if (this.inventoryMechanics.hasItem(id) &&
-        this.isLightSourceOn(id) &&
-        !this.isLightSourceDead(id)) {
+    // Check if any light source is in inventory, is not dead and is on
+    for (const lightSource of lightSources) {
+      if (this.inventoryMechanics.hasItem(lightSource) &&
+        this.isLightSourceOn(lightSource.id) &&
+        !this.isLightSourceDead(lightSource.id)) {
         return true;
       }
     }
 
     return false;
+  }
+
+  public getLightSources(scene: Scene): SceneObject[] {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
+    }
+
+    return Object.values(scene.objects)
+      .filter(obj => obj.providesLight);
   }
 
   /**
@@ -276,13 +286,11 @@ export class LightMechanicsService extends MechanicsBaseService {
    * @private
    * @throws Error if light state update fails
    */
-  private updateLightState(): void {
-    try {
-      const hasLight = this.calculateLightPresence();
-      this.setGlobalLight(hasLight);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unknown error occurred';
-      throw new Error(`Failed to update light state: ${message}`);
+  private updateLightState(scene: Scene): void {
+    if (!scene || scene.objects === undefined) {
+      throw new Error('Invalid scene object');
     }
+    const hasLight = this.calculateLightPresence(scene);
+    this.setGlobalLight(hasLight);
   }
 }

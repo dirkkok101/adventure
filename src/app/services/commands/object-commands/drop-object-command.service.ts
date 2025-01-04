@@ -55,6 +55,17 @@ import {GameTextService} from '../../game-text.service';
   providedIn: 'root'
 })
 export class DropObjectCommandService extends BaseCommandService {
+  /**
+   * Primary verbs for command
+   */
+  readonly verbs = ['drop'] as const;
+  /**
+   * Verb aliases mapping
+   */
+  protected override readonly verbAliases: { [key: string]: string } = {
+    'd': 'drop'
+  };
+
   constructor(
     gameStateService: GameStateService,
     sceneMechanicsService: SceneMechanicsService,
@@ -81,11 +92,20 @@ export class DropObjectCommandService extends BaseCommandService {
    * @param command Command to check
    * @returns True if command is a valid drop command without preposition
    *
+   * Error Conditions:
+   * - Returns false if command has preposition (handled by PutCommandService)
+   * - Returns false if verb doesn't match defined verbs
+   *
    * @throws None
    */
-  canHandle(command: GameCommand): boolean {
-    // Only handle 'drop' without preposition, use PutCommandService for 'put in'
-    return command.verb === 'drop' && !command.preposition;
+  override canHandle(command: GameCommand): boolean {
+    // First check if the verb is valid using base class logic
+    if (!super.canHandle(command)) {
+      return false;
+    }
+
+    // Only handle commands without preposition, use PutCommandService for 'put in'
+    return !command.preposition;
   }
 
   /**
@@ -110,13 +130,34 @@ export class DropObjectCommandService extends BaseCommandService {
     if (!command.object) {
       return {
         success: false,
-        message: this.gameTextService.get('error.noObject', {action: command.verb}),
+        message: this.gameTextService.get('error.noObject', {
+          action: this.getPrimaryVerb(command.verb)
+        }),
+        incrementTurn: false
+      };
+    }
+
+    // Get current scene
+    const scene = this.sceneMechanicsService.getCurrentScene();
+    if (!scene) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.noScene'),
+        incrementTurn: false
+      };
+    }
+
+    // Check light
+    if (!this.lightMechanicsService.isLightPresent(scene)) {
+      return {
+        success: false,
+        message: this.gameTextService.get('error.tooDark', {action: command.verb}),
         incrementTurn: false
       };
     }
 
     // Find and validate object
-    const object = this.sceneMechanicsService.findObject(command.object);
+    const object = this.sceneMechanicsService.findObjectByName(scene, command.object);
     if (!object) {
       return {
         success: false,
@@ -126,7 +167,7 @@ export class DropObjectCommandService extends BaseCommandService {
     }
 
     // Verify object possession
-    if (!this.inventoryMechanicsService.hasItem(object.id)) {
+    if (!this.inventoryMechanicsService.hasItem(object)) {
       return {
         success: false,
         message: this.gameTextService.get('error.notHoldingItem', {item: object.name}),
@@ -134,27 +175,17 @@ export class DropObjectCommandService extends BaseCommandService {
       };
     }
 
-    // Get current scene
-    const currentScene = this.sceneMechanicsService.getCurrentScene();
-    if (!currentScene) {
-      return {
-        success: false,
-        message: this.gameTextService.get('error.noScene'),
-        incrementTurn: false
-      };
-    }
-
     // Remove from inventory
-    const dropResult = this.inventoryMechanicsService.removeObjectFromInventory(object.id);
+    const dropResult = this.inventoryMechanicsService.removeObjectFromInventory(scene, object);
     if (!dropResult.success) {
       return dropResult;
     }
 
     // Add to current scene
-    const addToSceneResult = this.sceneMechanicsService.addObjectToScene(object);
+    const addToSceneResult = this.sceneMechanicsService.addObjectToScene(scene, object);
     if (!addToSceneResult.success) {
       // Rollback inventory change if scene update fails
-      this.inventoryMechanicsService.addObjectToInventory(object.id);
+      this.inventoryMechanicsService.addObjectToInventory(scene, object);
       return addToSceneResult;
     }
 
@@ -183,33 +214,39 @@ export class DropObjectCommandService extends BaseCommandService {
    * - Object data via SceneMechanicsService
    *
    * Error Conditions:
-   * - Invalid verb: Returns empty array
+   * - Invalid verb: Returns verb suggestions
    * - No inventory items: Returns empty array
    * - Error accessing state: Returns empty array
    *
    * @throws None - Returns empty array on error
    */
   override getSuggestions(command: GameCommand): string[] {
-    try {
-      if (!command.verb || command.verb !== 'drop') {
-        return [];
-      }
+    // Use base class for verb suggestions if no verb or partial verb
+    if (!command.verb || !this.canHandle(command)) {
+      return this.getVerbSuggestions(command.verb);
+    }
 
-      const suggestions = new Set<string>();
-
-      // Get droppable objects from inventory
-      const inventoryItems = this.inventoryMechanicsService.listInventory();
-      for (const itemId of inventoryItems) {
-        const item = this.sceneMechanicsService.findObjectById(itemId);
-        if (item) {
-          suggestions.add(item.name.toLowerCase());
-        }
-      }
-
-      return Array.from(suggestions);
-    } catch (error) {
-      console.error('Error getting drop command suggestions:', error);
+    // Get current scene and check light
+    const scene = this.sceneMechanicsService.getCurrentScene();
+    if (!scene || !this.lightMechanicsService.isLightPresent(scene)) {
       return [];
     }
+
+    // Get all droppable objects from inventory
+    const droppableObjects = this.inventoryMechanicsService.listInventory(scene);
+
+    const verb = this.getPrimaryVerb(command.verb);
+
+    // If we have a partial object, filter the suggestions
+    if (command.object) {
+      const partialObject = command.object.toLowerCase();
+      return droppableObjects
+        .filter(obj => obj.name.toLowerCase().startsWith(partialObject))
+        .map(obj => `${verb} ${obj.name}`);
+    }
+
+    // Return all possible objects if no partial object specified
+    return droppableObjects.map(obj => `${verb} ${obj.name}`);
+
   }
 }
