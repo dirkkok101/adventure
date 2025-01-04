@@ -367,6 +367,12 @@ export class SceneMechanicsService extends MechanicsBaseService {
     return null;
   }
 
+  /**
+   * Returns all the objects in the scene this includes normal objects and containers
+   * No visibility/validity checks are performed
+   * @param scene
+   * @returns An array of SceneObject instances
+   */
   getSceneObjects(scene: Scene): SceneObject[] {
     if (!scene || scene.objects === undefined) {
       throw new Error('Invalid scene object');
@@ -375,9 +381,7 @@ export class SceneMechanicsService extends MechanicsBaseService {
     const sceneObjects: SceneObject[] = [];
 
     for (const [id, obj] of Object.entries(scene.objects)) {
-      if (!obj.isContainer) {
         sceneObjects.push(obj);
-      }
     }
 
     return sceneObjects;

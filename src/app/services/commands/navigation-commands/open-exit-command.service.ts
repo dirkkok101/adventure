@@ -177,7 +177,8 @@ export class OpenExitCommandService extends BaseCommandService {
       return [];
     }
 
-    const exits = this.movementMechanicsService.getAvailableExits(scene);
+    const exits = this.movementMechanicsService.getAvailableExits(scene)
+      .filter(exit => exit.isOpenable);
 
     const verb = this.getPrimaryVerb(command.verb);
 
@@ -185,7 +186,8 @@ export class OpenExitCommandService extends BaseCommandService {
     if (command.object) {
       const partialObject = command.object.toLowerCase();
       return exits
-        .filter(obj => obj.direction.toLowerCase().startsWith(partialObject))
+        .filter(obj =>
+          obj.direction.toLowerCase().startsWith(partialObject))
         .map(obj => `${verb} ${obj.direction}`);
     }
 

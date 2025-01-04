@@ -201,7 +201,6 @@ export class OpenContainerCommandService extends BaseCommandService {
     if (!command.object) {
       const visibleContainers = this.getKnownObjectsNotOwned(scene)
         .filter(obj => {
-          console.log(obj.name, obj.isContainer);
           return obj.isContainer;});
 
       return visibleContainers.map(container =>

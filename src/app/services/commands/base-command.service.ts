@@ -138,7 +138,6 @@ export abstract class BaseCommandService implements ICommandService {
   }
 
   getKnownObjectsNotOwned(scene: Scene): SceneObject[] {
-    // Get all readable objects from both inventory, scene and open containers
     const sceneItems = this.sceneMechanicsService.getSceneObjects(scene)
       .filter(obj => !this.inventoryMechanicsService.hasItem(obj));
 

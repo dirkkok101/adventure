@@ -27,9 +27,7 @@ export class GameInputComponent {
     this.currentInput = input;
 
     if (input) {
-      console.log('Getting suggestions for:', input);
       const suggestions = this.gameService.getSuggestions(input);
-      console.log('Got suggestions:', suggestions);
       this.filteredCommands = suggestions.slice(0, 10); // Limit to 10 suggestions
     } else {
       this.filteredCommands = [];
