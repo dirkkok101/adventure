@@ -26,10 +26,6 @@ export const westOfHouse: Scene = {
                 examine: {
                     message: 'The house is a beautiful colonial house which is painted white. It is clear that the owners must have been quite wealthy.'
                 },
-                enter: {
-                    message: 'The door is boarded and cannot be opened.',
-                    failureMessage: 'The door is boarded shut.'
-                }
             } as { [key: string]: SceneInteraction }
         } as SceneObject,
         window: {
@@ -61,7 +57,7 @@ export const westOfHouse: Scene = {
                     removesFlags: ['windowOpen'],
                     requiredFlags: ['windowOpen']
                 },
-                enter: {
+                climb: {
                     message: 'You climb through the window into the kitchen.',
                     requiredFlags: ['windowOpen'],
                     failureMessage: 'The window needs to be opened wider first.'
@@ -79,7 +75,6 @@ export const westOfHouse: Scene = {
             contents: ['leaflet'],
             descriptions: {
                 default: 'There is a small mailbox here.',
-                contents: 'The mailbox contains:',
                 empty: 'The mailbox is empty.',
                 states: {
                     'mailboxOpen': 'The mailbox door is open.',
@@ -158,28 +153,28 @@ export const westOfHouse: Scene = {
             } as { [key: string]: SceneInteraction }
         } as SceneObject
     },
-    exits: [
-        {
-            direction: 'north',
-            targetScene: 'northOfHouse',
-            description: 'The path leads north along the house.'
-        },
-        {
-            direction: 'south',
-            targetScene: 'southOfHouse',
-            description: 'The path leads south along the house.'
-        },
-        {
-            direction: 'west',
-            targetScene: 'forest',
-            description: 'A forest path leads west into the trees.'
-        },
-        {
-            direction: 'east',
-            targetScene: 'kitchen',
-            description: 'You can enter through the window.',
-            requiredFlags: ['windowOpen'],
-            failureMessage: 'The window needs to be opened first.'
-        }
-    ]
+  exits: [
+    {
+      direction: 'north',
+      targetScene: 'northOfHouse',
+      description: 'The path leads north along the house.'
+    },
+    {
+      direction: 'south',
+      targetScene: 'southOfHouse',
+      description: 'The path leads south along the house.'
+    },
+    {
+      direction: 'west',
+      targetScene: 'forest',
+      description: 'A forest path leads west into the trees.'
+    },
+    {
+      direction: 'east',
+      targetScene: 'kitchen',
+      description: 'The kitchen window could provide entry to the house.',
+      requiredFlags: ['windowOpen'],
+      failureMessage: 'The window needs to be opened first.'
+    }
+  ]
 };

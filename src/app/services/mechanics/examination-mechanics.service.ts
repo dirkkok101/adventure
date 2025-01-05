@@ -90,13 +90,10 @@ export class ExaminationMechanicsService extends MechanicsBaseService {
     // Get base description
     const description = this.getBaseDescription(object, detailed);
 
-    // Add container contents if applicable
-    const containerDesc = this.containerMechanics.getContainerContents(scene, object);
-
     // Handle scoring
     this.handleExaminationScoring(object, detailed);
 
-    return description + (containerDesc ? '\n\n' + containerDesc : '');
+    return description;
   }
 
   /**

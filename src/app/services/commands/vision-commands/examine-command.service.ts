@@ -145,10 +145,10 @@ export class ExamineCommandService extends BaseCommandService {
       const partialObject = command.object.toLowerCase();
       return examinableObjects
         .filter(obj => obj.name.toLowerCase().startsWith(partialObject))
-        .map(obj => `${verb} ${obj.name}`);
+        .map(obj => `${verb} ${obj.name.toLowerCase()}`);
     }
 
     // Return all possible object combinations
-    return examinableObjects.map(obj => `${verb} ${obj.name}`);
+    return examinableObjects.map(obj => `${verb} ${obj.name.toLowerCase()}`);
   }
 }

@@ -57,34 +57,11 @@ export class GameService {
     ) {}
 
     /**
-     * Initializes a new game session.
-     * Sets up initial game state, scene, and player position.
-     * @throws Error if initialization fails
-     */
-    initializeGame(): void {
-        try {
-            this.gameInitializationService.initializeGame();
-        } catch (error) {
-            console.error('Error initializing game:', error);
-            this.gameTextService.addText('Error initializing game. Please refresh the page.');
-            throw error;
-        }
-    }
-
-    /**
      * Get an observable of the game state for reactive UI updates
      * @returns Observable of the current GameState
      */
     getCurrentState$(): Observable<GameState> {
         return this.gameStateService.state$;
-    }
-
-    /**
-     * Get the current game state synchronously. Only use this in services for game logic processing.
-     * @internal Use getCurrentState$() in components instead
-     */
-    getCurrentState(): GameState {
-        return this.gameStateService.getCurrentState();
     }
 
     /**
@@ -114,6 +91,7 @@ export class GameService {
 
         if (result.success && result.incrementTurn) {
             this.progressMechanicsService.incrementTurns();
+            this.saveGame();
         }
     }
 
